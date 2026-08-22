@@ -241,7 +241,7 @@ emit_theme() {
         magenta: $magenta
       }
     }' >>"$tmp"
-  (( theme_count++ ))
+  theme_count=$((theme_count + 1))
 }
 
 user_themes=()
