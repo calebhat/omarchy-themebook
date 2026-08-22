@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=ThemeBook
+GenericName=Theme catalog
+Comment=Browse, favorite, and apply installed Omarchy themes
+Exec=omarchy-shell shell toggle io.github.calebhat.themebook '{}'
+TryExec=omarchy-shell
+Icon=preferences-desktop-theme
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=theme;omarchy;wallpaper;aether;favorites;
+# No StartupWMClass: Quickshell surfaces all report org.quickshell.

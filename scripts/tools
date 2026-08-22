@@ -1,0 +1,14 @@
+#!/bin/bash
+# Report which optional binaries ThemeBook can call.
+
+set -euo pipefail
+
+have() {
+  if command -v "$1" >/dev/null 2>&1; then
+    printf '%s' true
+  else
+    printf '%s' false
+  fi
+}
+
+printf '{"aether":%s,"sunwait":%s,"uwsm":%s}\n' "$(have aether)" "$(have sunwait)" "$(have uwsm-app)"

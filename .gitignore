@@ -1,0 +1,4 @@
+*~
+*.qmlc
+.qmllint.ini
+preview-full.png

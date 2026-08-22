@@ -1,0 +1,49 @@
+#!/bin/bash
+# Print day or night using sunwait and Omarchy's weather location.
+
+set -euo pipefail
+
+if ! command -v sunwait >/dev/null 2>&1; then
+  echo "unknown"
+  exit 0
+fi
+
+lat=""
+lon=""
+weather=$HOME/.local/state/omarchy/settings/weather.json
+if [[ -f $weather ]] && command -v jq >/dev/null 2>&1; then
+  lat=$(jq -r '.latitude // empty' "$weather")
+  lon=$(jq -r '.longitude // empty' "$weather")
+fi
+
+if ! [[ $lat =~ ^-?[0-9]+([.][0-9]+)?$ && $lon =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
+  echo "unknown"
+  exit 0
+fi
+if ! awk -v n="$lat" 'BEGIN { exit !(n >= -90 && n <= 90) }'; then
+  echo "unknown"
+  exit 0
+fi
+if ! awk -v n="$lon" 'BEGIN { exit !(n >= -180 && n <= 180) }'; then
+  echo "unknown"
+  exit 0
+fi
+
+# sunwait wants 42.8N 89.0W (hemisphere letter, no sign).
+lat_hem=N
+lon_hem=E
+if awk -v n="$lat" 'BEGIN { exit !(n < 0) }'; then
+  lat_hem=S
+  lat=${lat#-}
+fi
+if awk -v n="$lon" 'BEGIN { exit !(n < 0) }'; then
+  lon_hem=W
+  lon=${lon#-}
+fi
+
+result=$(sunwait poll "${lat}${lat_hem}" "${lon}${lon_hem}" 2>/dev/null || true)
+case $result in
+  DAY) echo day ;;
+  NIGHT) echo night ;;
+  *) echo unknown ;;
+esac

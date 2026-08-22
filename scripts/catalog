@@ -1,0 +1,189 @@
+#!/bin/bash
+# Emit JSON for every installed Omarchy theme (user overlays win on slug).
+
+set -euo pipefail
+
+USER_THEMES_PATH="$HOME/.config/omarchy/themes"
+OMARCHY_THEMES_PATH="${OMARCHY_PATH:-/usr/share/omarchy}/themes"
+CURRENT_THEME=$(tr -d '\n' <"$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null || true)
+CURRENT_BG=$(readlink -f "$HOME/.local/state/omarchy/current/background" 2>/dev/null || true)
+
+runtime_dir=${XDG_RUNTIME_DIR:-$HOME/.cache/omarchy}
+mkdir -p "$runtime_dir"
+tmp=$(mktemp "$runtime_dir/themebook-catalog.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+
+path_allowed() {
+  local file=$1
+  local slug=$2
+  local real
+  real=$(realpath -e "$file" 2>/dev/null) || return 1
+  [[ $real == "$USER_THEMES_PATH/$slug/"* ||
+     $real == "$HOME/.config/omarchy/backgrounds/$slug/"* ||
+     $real == "$OMARCHY_THEMES_PATH/$slug/"* ]]
+}
+
+title_case() {
+  sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g' <<<"$1"
+}
+
+find_preview() {
+  local theme_path=$1
+  local slug=${theme_path##*/}
+  local preview_name candidate
+  for preview_name in preview.png preview.jpg preview.jpeg preview.webp preview.gif preview.bmp; do
+    candidate=$theme_path/$preview_name
+    if [[ -f $candidate ]] && path_allowed "$candidate" "$slug"; then
+      realpath -e "$candidate"
+      return
+    fi
+  done
+  if [[ -d $theme_path/backgrounds ]]; then
+    while IFS= read -r candidate; do
+      if path_allowed "$candidate" "$slug"; then
+        realpath -e "$candidate"
+        return
+      fi
+    done < <(find -P "$theme_path/backgrounds" -maxdepth 1 -type f \
+      \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) \
+      -print 2>/dev/null | sort)
+  fi
+}
+
+list_backgrounds() {
+  local theme_path=$1
+  local slug=${theme_path##*/}
+  local user_bg=$HOME/.config/omarchy/backgrounds/$slug
+  local candidate
+  {
+    if [[ -d $user_bg ]]; then
+      find -P "$user_bg" -maxdepth 1 -type f \
+        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) -print
+    fi
+    if [[ -d $theme_path/backgrounds ]]; then
+      find -P "$theme_path/backgrounds" -maxdepth 1 -type f \
+        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) -print
+    fi
+  } 2>/dev/null | sort -u | while IFS= read -r candidate; do
+    if path_allowed "$candidate" "$slug"; then
+      realpath -e "$candidate"
+    fi
+  done
+}
+
+get_color() {
+  local file=$1
+  local key=$2
+  [[ -f $file ]] || return
+  sed -nE "s/^[[:space:]]*$key[[:space:]]*=[[:space:]]*\"?([^\"[:space:]]+).*/\1/p" "$file" | head -n 1
+}
+
+emit_theme() {
+  local slug=$1
+  local theme_path=$2
+  local source=$3
+  [[ $slug =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return
+  [[ $slug != *..* ]] || return
+  local colors_file preview is_current=false is_git=false
+  local accent background foreground red orange yellow green cyan blue magenta mode
+  local bg_json='[]'
+
+  preview=$(find_preview "$theme_path")
+  colors_file=$theme_path/colors.toml
+  [[ -f $colors_file ]] || colors_file=""
+
+  accent=$(get_color "$colors_file" accent)
+  background=$(get_color "$colors_file" background)
+  foreground=$(get_color "$colors_file" foreground)
+  red=$(get_color "$colors_file" red)
+  orange=$(get_color "$colors_file" orange)
+  yellow=$(get_color "$colors_file" yellow)
+  green=$(get_color "$colors_file" green)
+  cyan=$(get_color "$colors_file" cyan)
+  blue=$(get_color "$colors_file" blue)
+  magenta=$(get_color "$colors_file" magenta)
+  mode=$(get_color "$colors_file" mode)
+  mode=${mode,,}
+
+  [[ $slug == "$CURRENT_THEME" ]] && is_current=true
+  [[ -d $theme_path/.git ]] && is_git=true
+
+  if command -v jq >/dev/null 2>&1; then
+    bg_json=$(list_backgrounds "$theme_path" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+  fi
+
+  jq -cn \
+    --arg slug "$slug" \
+    --arg name "$(title_case "$slug")" \
+    --arg path "$theme_path" \
+    --arg source "$source" \
+    --arg preview "$preview" \
+    --arg mode "$mode" \
+    --argjson current "$is_current" \
+    --argjson git "$is_git" \
+    --argjson backgrounds "$bg_json" \
+    --arg currentBg "$CURRENT_BG" \
+    --arg accent "$accent" \
+    --arg background "$background" \
+    --arg foreground "$foreground" \
+    --arg red "$red" \
+    --arg orange "$orange" \
+    --arg yellow "$yellow" \
+    --arg green "$green" \
+    --arg cyan "$cyan" \
+    --arg blue "$blue" \
+    --arg magenta "$magenta" \
+    '{
+      slug: $slug,
+      name: $name,
+      path: $path,
+      source: $source,
+      preview: $preview,
+      mode: $mode,
+      current: $current,
+      git: $git,
+      backgrounds: $backgrounds,
+      currentBackground: $currentBg,
+      colors: {
+        accent: $accent,
+        background: $background,
+        foreground: $foreground,
+        red: $red,
+        orange: $orange,
+        yellow: $yellow,
+        green: $green,
+        cyan: $cyan,
+        blue: $blue,
+        magenta: $magenta
+      }
+    }' >>"$tmp"
+}
+
+user_themes=()
+if [[ -d $USER_THEMES_PATH ]]; then
+  while IFS= read -r theme_path; do
+    user_themes+=("${theme_path##*/}")
+  done < <(find -L "$USER_THEMES_PATH" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -print 2>/dev/null | sort)
+fi
+
+if [[ -d $OMARCHY_THEMES_PATH ]]; then
+  while IFS= read -r theme_path; do
+    slug=${theme_path##*/}
+    skip=false
+    for u in "${user_themes[@]}"; do
+      if [[ $u == "$slug" ]]; then
+        skip=true
+        break
+      fi
+    done
+    if [[ $skip == false ]]; then
+      emit_theme "$slug" "$theme_path" "stock"
+    fi
+  done < <(find -L "$OMARCHY_THEMES_PATH" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort)
+fi
+
+for slug in "${user_themes[@]}"; do
+  emit_theme "$slug" "$USER_THEMES_PATH/$slug" "user"
+done
+
+jq -s 'sort_by(.name)' "$tmp"

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.calebhat.themebook",
+  "name": "ThemeBook",
+  "version": "1.0.0",
+  "author": "calebhat",
+  "license": "MIT",
+  "description": "A windowed catalog of installed Omarchy themes with favorites, folders, previews, an Aether hand-off, and optional day/night scheduling.",
+  "homepage": "https://github.com/calebhat/omarchy-themebook",
+  "kinds": [
+    "service",
+    "panel"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "panel": "ThemeBook.qml"
+  }
+}

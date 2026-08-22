@@ -1,0 +1,28 @@
+#!/bin/bash
+# Create the Apps launcher once. Never overwrites a file the user already has.
+# Does not edit omarchy-menu.jsonc or any other user config.
+
+set -euo pipefail
+
+PLUGIN_DIR=${1-}
+[[ -n $PLUGIN_DIR && -d $PLUGIN_DIR ]] || {
+  echo "Usage: desktop-entry <plugin-dir>" >&2
+  exit 1
+}
+
+resolved=$(realpath -e "$PLUGIN_DIR" 2>/dev/null || true)
+plugins=$(realpath -e "$HOME/.config/omarchy/plugins" 2>/dev/null || true)
+[[ -n $resolved && -n $plugins && $resolved == "$plugins"/* ]] || {
+  echo "desktop-entry: plugin dir is not under the Omarchy plugins folder" >&2
+  exit 1
+}
+
+src=$resolved/share/applications/io.github.calebhat.themebook.desktop
+dst=$HOME/.local/share/applications/io.github.calebhat.themebook.desktop
+
+[[ -f $src ]] || exit 0
+[[ -e $dst ]] && exit 0
+
+mkdir -p "$HOME/.local/share/applications"
+cp "$src" "$dst"
+chmod 644 "$dst"
