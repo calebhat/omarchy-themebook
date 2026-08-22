@@ -1,0 +1,90 @@
+#!/bin/bash
+# Build Omarchy-style JPEG thumbs (vipsthumbnail 1536x864) for theme previews.
+
+set -euo pipefail
+
+CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/image-selector
+INDEX=$CACHE/index.tsv
+mkdir -p "$CACHE"
+
+generate_thumbnail() {
+  local image=$1
+  local thumbnail=$2
+  local tmp=$thumbnail.$$.jpg
+  [[ -f $thumbnail ]] && return 0
+  command -v vipsthumbnail >/dev/null 2>&1 || return 0
+  if VIPS_CONCURRENCY=1 vipsthumbnail "$image" --size 1536x864 --smartcrop=centre --path "$tmp[Q=82,strip]" 2>/dev/null; then
+    mv -f "$tmp" "$thumbnail"
+  else
+    rm -f "$tmp"
+  fi
+}
+
+PREVIEW_DIR=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/theme-selector/previews
+mkdir -p "$PREVIEW_DIR"
+
+thumb_for() {
+  local image=$1
+  local signature hash thumbnail
+  [[ -e $image ]] || return
+  signature=$(stat -Lc '%s:%Y' "$image") || return
+  hash=$(awk -F '\t' -v path="$image" -v sig="$signature" '$1 == path && $2 == sig { print $3; exit }' "$INDEX" 2>/dev/null || true)
+  if [[ -z $hash ]]; then
+    hash=$(printf '%s\t%s' "$image" "$signature" | md5sum | cut -d ' ' -f 1)
+    printf '%s\t%s\t%s\n' "$image" "$signature" "$hash" >>"$INDEX"
+  fi
+  thumbnail=$CACHE/$hash.jpg
+  if [[ -f $thumbnail && $image -nt $thumbnail ]]; then
+    rm -f "$thumbnail"
+  fi
+  if [[ ! -f $thumbnail ]]; then
+    generate_thumbnail "$image" "$thumbnail"
+  fi
+  if [[ -f $thumbnail ]]; then
+    printf '%s\n' "$thumbnail"
+  else
+    printf '%s\n' "$image"
+  fi
+}
+
+warm_one() {
+  local image=$1
+  [[ -e $image ]] || return
+  local dir=${image%/*}
+  local base=${image##*/}
+  local slug
+  if [[ ${dir##*/} == "previews" ]]; then
+    slug=${base%.*}
+  else
+    slug=${dir##*/}
+  fi
+  local ext=${image##*.}
+  ext=${ext,,}
+  # Same symlink path as omarchy-theme-switcher so JPEG hashes match.
+  local link=$PREVIEW_DIR/$slug.$ext
+  ln -sfn "$image" "$link"
+  thumb_for "$link" >/dev/null
+}
+
+if (( $# >= 2 )); then
+  while (( $# >= 2 )); do
+    slug=$1
+    image=$2
+    shift 2
+    [[ -e $image ]] || continue
+    ext=${image##*.}
+    ext=${ext,,}
+    link=$PREVIEW_DIR/$slug.$ext
+    ln -sfn "$image" "$link"
+    thumb_for "$link" >/dev/null
+  done
+elif (( $# > 0 )); then
+  for image in "$@"; do
+    warm_one "$image"
+  done
+else
+  while IFS= read -r image; do
+    [[ -n $image ]] || continue
+    warm_one "$image"
+  done
+fi

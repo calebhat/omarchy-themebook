@@ -2,7 +2,9 @@
 # Fail if the panel is missing a labeled control from the product spec.
 
 set -euo pipefail
-qml=$(cd "$(dirname "$0")/.." && pwd)/ThemeBook.qml
+root=$(cd "$(dirname "$0")/.." && pwd)
+qml=$root/ThemeBook.qml
+picker=$root/ThemePicker.qml
 need=(
   'label: "All"'
   'label: "Favorites"'
@@ -20,7 +22,26 @@ need=(
   'label: "Remove"'
   'label: "Apply theme"'
   'label: "Sunrise / sunset"'
+  'label: "Timed Themes"'
+  'text: "Wallpapers"'
+  'text: "Apply and stop schedule"'
+  'text: "New folder"'
+  'id: folderActPopup'
+  '{ id: "rename", label: "Rename" }'
+  '{ id: "delete", label: "Delete" }'
+  'text: "Collapse all"'
+  'text: "Expand all"'
+  'text: "Theme menu"'
+  'text: "Picker"'
+  'label: "Theme cycle"'
+  'label: "Wallpaper cycle"'
+  'text: "Also cycle wallpapers"'
+  'text: "Backgrounds — pin one as default for apply and picker preview"'
+  'Choose folder…'
+  'text: rule && Model.hourIsPm(rule.time) ? "PM" : "AM"'
+  'text: "Delete folder'
   'F Favorite   H Hide   Shift+↑/↓ Sort in folder'
+  'Esc catalog   Tab mode   C 12/24   ↑/↓ row   ←/→ field   Enter activate   A add time'
   'onAccepted: root.submitPrompt()'
   'if (root.folderMenuOpen || root.promptKind || root.confirmRemove) return'
 )
@@ -30,4 +51,33 @@ for s in "${need[@]}"; do
     exit 1
   fi
 done
+if ! grep -F -q -- "type to filter" "$picker"; then
+  echo "missing: footer shortcuts in ThemePicker" >&2
+  exit 1
+fi
+if ! grep -F -q -- "folderFilter" "$picker"; then
+  echo "missing: independent folder filter" >&2
+  exit 1
+fi
+if ! grep -F -q -- "themeFilter" "$picker"; then
+  echo "missing: independent theme filter" >&2
+  exit 1
+fi
+if ! grep -F -q -- "rememberLocation" "$picker"; then
+  echo "missing: persistent picker location" >&2
+  exit 1
+fi
+if ! grep -F -q -- "function keyText" "$picker"; then
+  echo "missing: keyText fallback for filter typing" >&2
+  exit 1
+fi
+if grep -F -q -- 'title: "ThemeBook Picker"' "$qml"; then
+  echo "old picker window still present" >&2
+  exit 1
+fi
+if grep -E -q 'radius: (height / 2|[0-9]+)' "$qml" "$picker"; then
+  echo "hardcoded radius; use Style.cornerRadius" >&2
+  grep -nE 'radius: (height / 2|[0-9]+)' "$qml" "$picker" >&2
+  exit 1
+fi
 echo "labels ok"

@@ -1,4 +1,4 @@
-# Marketplace issue body (do not file until the owner says so)
+# Marketplace issue body
 
 Title: `[Plugin]: ThemeBook`
 
@@ -21,7 +21,7 @@ themes
 
 ### Maintainer notes
 
-Installed-theme browser (not extra-theme install, not a designer). Favorites, folders, preview-then-apply, optional Aether, optional clock/sun schedule. MIT. No sudo. No network. No setup script. Enabling may create an Apps .desktop file only if that path does not already exist; it does not edit omarchy-menu.jsonc.
+Full theme suite for installed Omarchy themes (organizer + scheduler, not extra-theme install, not a designer). Catalog with favorites, recents, folders, default wallpapers, preview-then-apply. Optional Theme menu checkbox replaces Super+Ctrl+Shift+Space with a stock-style carousel; off restores Omarchy’s picker. Scheduler: Timed Themes, sunrise/sunset, theme cycle, wallpaper cycle (one type at a time). Optional Aether. MIT. No sudo. No network. No setup script. Apps .desktop created only if missing. Theme menu writes style.theme in the user menu extension only while enabled.
 
 ### Submission checklist
 

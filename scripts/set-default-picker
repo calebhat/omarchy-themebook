@@ -1,0 +1,61 @@
+#!/bin/bash
+# Override or restore Style > Theme in the user menu extension.
+# Stock Style > Theme lives in Omarchy's default menu; this file only holds
+# overrides, so removing style.theme restores the carousel.
+
+set -euo pipefail
+
+MENU=$HOME/.config/omarchy/extensions/omarchy-menu.jsonc
+mkdir -p "$(dirname "$MENU")"
+ENTRY='  "style.theme": {"icon":"󰸌","label":"Theme","aliases":["theme","themes"],"action":"omarchy-shell themebook pick"}'
+
+strip_theme_override() {
+  python3 - "$MENU" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+if not path.exists():
+    raise SystemExit(0)
+lines = path.read_text().splitlines(True)
+out = []
+for line in lines:
+    stripped = line.lstrip()
+    if stripped.startswith('"style.theme"'):
+        continue
+    out.append(line)
+text = "".join(out).replace(",\n}", "\n}")
+path.write_text(text)
+PY
+}
+
+insert_theme_override() {
+  python3 - "$MENU" "$ENTRY" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+entry = sys.argv[2]
+text = path.read_text() if path.exists() else "{\n}\n"
+idx = text.rfind("}")
+if idx < 0:
+    path.write_text("{\n" + entry + "\n}\n")
+    raise SystemExit(0)
+before = text[:idx].rstrip()
+if before.endswith("{") or before.endswith(","):
+    inserted = before + "\n" + entry + "\n"
+else:
+    inserted = before + ",\n" + entry + "\n"
+path.write_text(inserted + text[idx:])
+PY
+}
+
+case ${1:-} in
+  replace)
+    strip_theme_override
+    insert_theme_override
+    ;;
+  restore)
+    strip_theme_override
+    ;;
+  *)
+    echo "Usage: set-default-picker replace|restore" >&2
+    exit 1
+    ;;
+esac

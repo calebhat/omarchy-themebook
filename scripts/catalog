@@ -16,11 +16,17 @@ trap 'rm -f "$tmp"' EXIT
 path_allowed() {
   local file=$1
   local slug=$2
-  local real
+  local real theme_real
   real=$(realpath -e "$file" 2>/dev/null) || return 1
-  [[ $real == "$USER_THEMES_PATH/$slug/"* ||
-     $real == "$HOME/.config/omarchy/backgrounds/$slug/"* ||
-     $real == "$OMARCHY_THEMES_PATH/$slug/"* ]]
+  theme_real=$(realpath -e "$USER_THEMES_PATH/$slug" 2>/dev/null || true)
+  if [[ -n $theme_real && $real == "$theme_real/"* ]]; then
+    return 0
+  fi
+  theme_real=$(realpath -e "$OMARCHY_THEMES_PATH/$slug" 2>/dev/null || true)
+  if [[ -n $theme_real && $real == "$theme_real/"* ]]; then
+    return 0
+  fi
+  [[ $real == "$HOME/.config/omarchy/backgrounds/$slug/"* ]]
 }
 
 title_case() {
@@ -48,6 +54,9 @@ find_preview() {
       \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) \
       -print 2>/dev/null | sort)
   fi
+  if [[ -f $theme_path/colors.toml ]]; then
+    make_swatch "$slug" "$theme_path/colors.toml"
+  fi
 }
 
 list_backgrounds() {
@@ -71,11 +80,47 @@ list_backgrounds() {
   done
 }
 
+lookup_thumb() {
+  local image=$1
+  local cache=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/image-selector
+  local signature hash thumbnail
+  [[ -f $image ]] || return
+  signature=$(stat -Lc '%s:%Y' "$image" 2>/dev/null) || return
+  hash=$(printf '%s\t%s' "$image" "$signature" | md5sum | cut -d ' ' -f 1)
+  thumbnail=$cache/$hash.jpg
+  if [[ -f $thumbnail ]]; then
+    printf '%s\n' "$thumbnail"
+  else
+    printf '%s\n' "$image"
+  fi
+}
+
 get_color() {
   local file=$1
   local key=$2
   [[ -f $file ]] || return
   sed -nE "s/^[[:space:]]*$key[[:space:]]*=[[:space:]]*\"?([^\"[:space:]]+).*/\1/p" "$file" | head -n 1
+}
+
+make_swatch() {
+  local slug=$1
+  local colors=$2
+  local dir=$HOME/.cache/omarchy/themebook/swatches
+  local out=$dir/$slug.jpg
+  local bg ac
+  mkdir -p "$dir"
+  bg=$(get_color "$colors" background)
+  ac=$(get_color "$colors" accent)
+  [[ -n $bg ]] || bg="#1a1a1a"
+  [[ -n $ac ]] || ac="#888888"
+  if [[ -f $out && ( ! -f $colors || $out -nt $colors ) ]]; then
+    printf '%s\n' "$out"
+    return
+  fi
+  if command -v magick >/dev/null 2>&1; then
+    magick -size 1536x864 "xc:$bg" -fill "$ac" -draw "rectangle 0,700 1536,864" "$out" 2>/dev/null || return
+    printf '%s\n' "$out"
+  fi
 }
 
 emit_theme() {
@@ -89,6 +134,17 @@ emit_theme() {
   local bg_json='[]'
 
   preview=$(find_preview "$theme_path")
+  local thumbnail=$preview
+  if [[ -n $preview ]]; then
+    local ext=${preview##*.}
+    ext=${ext,,}
+    local link=$HOME/.cache/omarchy/theme-selector/previews/$slug.$ext
+    if [[ -e $link ]]; then
+      thumbnail=$(lookup_thumb "$link")
+    else
+      thumbnail=$(lookup_thumb "$preview")
+    fi
+  fi
   colors_file=$theme_path/colors.toml
   [[ -f $colors_file ]] || colors_file=""
 
@@ -118,6 +174,7 @@ emit_theme() {
     --arg path "$theme_path" \
     --arg source "$source" \
     --arg preview "$preview" \
+    --arg thumbnail "$thumbnail" \
     --arg mode "$mode" \
     --argjson current "$is_current" \
     --argjson git "$is_git" \
@@ -139,6 +196,7 @@ emit_theme() {
       path: $path,
       source: $source,
       preview: $preview,
+      thumbnail: $thumbnail,
       mode: $mode,
       current: $current,
       git: $git,

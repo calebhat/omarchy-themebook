@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.calebhat.themebook",
   "name": "ThemeBook",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "author": "calebhat",
   "license": "MIT",
-  "description": "A windowed catalog of installed Omarchy themes with favorites, folders, previews, an Aether hand-off, and optional day/night scheduling.",
+  "description": "Full Omarchy theme suite: organize installed themes into folders, preview-then-apply, optional stock-style carousel, default wallpapers, and a scheduler for timed themes, sunrise/sunset, theme cycle, and wallpaper cycle.",
   "homepage": "https://github.com/calebhat/omarchy-themebook",
   "kinds": [
     "service",
