@@ -698,7 +698,6 @@ Item {
     if (JSON.stringify(root.config.themeCycle || {}) !== JSON.stringify(next.themeCycle || {}))
       saveConfig(next)
     root.foldersChanged()
-    root.reloadCatalog()
   }
 
   function installLaunchers() {

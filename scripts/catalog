@@ -184,14 +184,7 @@ emit_theme() {
   fi
   local thumbnail=$preview
   if [[ -n $preview ]]; then
-    local ext=${preview##*.}
-    ext=${ext,,}
-    local link=$HOME/.cache/omarchy/theme-selector/previews/$slug.$ext
-    if [[ -e $link ]]; then
-      thumbnail=$(lookup_thumb "$link")
-    else
-      thumbnail=$(lookup_thumb "$preview")
-    fi
+    thumbnail=$(lookup_thumb "$preview")
   fi
   colors_file=$theme_path/colors.toml
   [[ -f $colors_file ]] || colors_file=""

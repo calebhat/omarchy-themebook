@@ -20,9 +20,6 @@ generate_thumbnail() {
   fi
 }
 
-PREVIEW_DIR=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/theme-selector/previews
-mkdir -p "$PREVIEW_DIR"
-
 thumb_for() {
   local image=$1
   local signature hash thumbnail
@@ -50,20 +47,7 @@ thumb_for() {
 warm_one() {
   local image=$1
   [[ -e $image ]] || return
-  local dir=${image%/*}
-  local base=${image##*/}
-  local slug
-  if [[ ${dir##*/} == "previews" ]]; then
-    slug=${base%.*}
-  else
-    slug=${dir##*/}
-  fi
-  local ext=${image##*.}
-  ext=${ext,,}
-  # Same symlink path as omarchy-theme-switcher so JPEG hashes match.
-  local link=$PREVIEW_DIR/$slug.$ext
-  ln -sfn "$image" "$link"
-  thumb_for "$link" >/dev/null
+  thumb_for "$image" >/dev/null
 }
 
 if (( $# >= 2 )); then
@@ -72,11 +56,7 @@ if (( $# >= 2 )); then
     image=$2
     shift 2
     [[ -e $image ]] || continue
-    ext=${image##*.}
-    ext=${ext,,}
-    link=$PREVIEW_DIR/$slug.$ext
-    ln -sfn "$image" "$link"
-    thumb=$(thumb_for "$link")
+    thumb=$(thumb_for "$image")
     printf '%s\t%s\n' "$slug" "$thumb"
   done
 elif (( $# > 0 )); then
