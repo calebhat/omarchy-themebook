@@ -176,7 +176,7 @@ Item {
     rebuild()
     restoreSelection(p && p.lastSlug ? p.lastSlug : "")
     opened = true
-    focusRow = p && p.lastFocusRow === "folders" ? "folders" : "themes"
+    focusRow = "themes"
     Qt.callLater(function() { keyScope.forceActiveFocus() })
   }
 
