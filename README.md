@@ -2,7 +2,7 @@
 
 **The full theme suite for [Omarchy](https://omarchy.org)** — organizer, previewer, picker, and scheduler in one plugin.
 
-Browse every installed theme, sort them into folders with favorites and recents first, pin a default wallpaper, preview before you apply, replace the system carousel if you want, then put the desktop on a clock, sunrise/sunset, theme cycle, or wallpaper cycle. Optional hand-off to [Aether](https://github.com/bjarneo/aether) when you want to edit.
+Browse every installed theme, sort them into folders with favorites and recents first, pin a default wallpaper, preview before you apply, use an enhanced stock-style carousel, then put the desktop on a clock, sunrise/sunset, theme cycle, or wallpaper cycle. Optional hand-off to [Aether](https://github.com/bjarneo/aether) when you want to edit.
 
 ThemeBook is not a theme installer and not a designer. It is the place you live in after themes are installed: catalog, library, and schedule.
 
@@ -32,7 +32,7 @@ No sudo or pkexec is required. No network calls. No extra packages.
 - **Remove** user themes (never stock, never the active theme) with a confirmation dialog.
 - **Update git themes** via `omarchy theme update` (shown when the selected theme is git-backed).
 - **Edit in Aether** (optional) opens the Aether GUI with the theme wallpaper loaded for editing. It does not apply the theme through Aether.
-- **Theme menu** (checkbox, on for new installs) can replace Super+Ctrl+Shift+Space / Style > Theme with ThemeBook’s stock-style carousel. Toggle off to restore Omarchy’s picker.
+- **Theme menu** (checkbox, on for new installs) can replace Super+Ctrl+Shift+Space / Style > Theme with ThemeBook’s enhanced stock-style carousel. Toggle off to restore Omarchy’s picker.
 - **Carousel picker** — skewed previews like stock Omarchy, folder tiles above, type-to-filter (folders and themes independently), ↑/↓ between rows, ←/→ to move, Esc clears filter then closes. Remembers last folder, theme, and whether focus was on folders or themes. Open with `omarchy-shell themebook pick`.
 - **Schedule** (header **Schedule** button) — exactly one type at a time, shown as radio chips: **Off**, **Timed Themes**, **Sunrise / sunset**, **Theme cycle**, **Wallpaper cycle**. Only one of those can run. While a schedule is running, the catalog **Schedule** button is highlighted and a banner names the active type. Applying a theme by hand asks to confirm and then turns the schedule **Off**, so a timer cannot revert your pick. Timed / sunrise use 12- or 24-hour time; AM/PM is a separate control in 12-hour mode. If `acrogenesis.theme-scheduler` is enabled, ThemeBook’s theme schedule stays off.
 
