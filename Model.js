@@ -65,15 +65,69 @@ function isValidSlug(slug) {
   return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(s) && s.indexOf("..") < 0
 }
 
+var MAX_THEMES = 256
+var MAX_BACKGROUNDS = 48
+var MAX_FOLDERS = 64
+var MAX_RULES = 48
+var MAX_FAVORITES = 256
+var MAX_PATH = 512
+var MAX_NAME = 80
+var MAX_CATALOG_CHARS = 1048576
+var MAX_CONFIG_CHARS = 262144
+
+function capString(s, max) {
+  s = String(s == null ? "" : s)
+  if (s.length > max) return s.slice(0, max)
+  return s
+}
+
+function capPath(s) {
+  s = String(s == null ? "" : s)
+  if (!s || s.indexOf("..") >= 0 || s.length > MAX_PATH) return ""
+  return s
+}
+
+function maxCatalogChars() { return MAX_CATALOG_CHARS }
+function maxConfigChars() { return MAX_CONFIG_CHARS }
+
+function boundCatalog(themes) {
+  if (!Array.isArray(themes)) return []
+  var out = []
+  for (var i = 0; i < themes.length && out.length < MAX_THEMES; i++) {
+    var src = themes[i]
+    if (!src || !isValidSlug(src.slug)) continue
+    var t = {}
+    for (var k in src) t[k] = src[k]
+    t.slug = String(src.slug)
+    t.name = capString(src.name || src.slug, MAX_NAME)
+    t.path = capPath(src.path)
+    t.preview = capPath(src.preview)
+    t.thumbnail = capPath(src.thumbnail)
+    t.currentBackground = capPath(src.currentBackground)
+    var bgs = []
+    var raw = src.backgrounds
+    if (Array.isArray(raw)) {
+      for (var j = 0; j < raw.length && bgs.length < MAX_BACKGROUNDS; j++) {
+        var p = capPath(raw[j])
+        if (p) bgs.push(p)
+      }
+    }
+    t.backgrounds = bgs
+    out.push(t)
+  }
+  return out
+}
+
 function isReservedSection(id) {
   return !!RESERVED_SECTIONS[String(id || "")]
 }
 
-function asStringArray(value) {
+function asStringArray(value, maxItems) {
   if (!Array.isArray(value)) return []
+  var limit = maxItems > 0 ? maxItems : MAX_FAVORITES
   var out = []
   var seen = {}
-  for (var i = 0; i < value.length; i++) {
+  for (var i = 0; i < value.length && out.length < limit; i++) {
     var s = String(value[i] || "").trim()
     if (!isValidSlug(s) || seen[s]) continue
     seen[s] = true
@@ -86,7 +140,7 @@ function normalizeFolders(raw) {
   if (!Array.isArray(raw)) return []
   var out = []
   var seenId = {}
-  for (var i = 0; i < raw.length; i++) {
+  for (var i = 0; i < raw.length && out.length < MAX_FOLDERS; i++) {
     var f = raw[i] || {}
     var id = String(f.id || "").trim()
     var name = String(f.name || "").trim().slice(0, 40)
@@ -99,7 +153,7 @@ function normalizeFolders(raw) {
     out.push({
       id: id,
       name: name,
-      themes: asStringArray(f.themes),
+      themes: asStringArray(f.themes, MAX_FAVORITES),
       inPicker: f.inPicker === true
     })
   }

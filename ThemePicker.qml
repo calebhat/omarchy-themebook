@@ -392,6 +392,7 @@ Item {
         z: 200
 
         Text {
+          textFormat: Text.PlainText
           visible: root.focusRow === "folders" || root.folderFilter.length > 0
           anchors.horizontalCenter: parent.horizontalCenter
           width: parent.width
@@ -436,6 +437,7 @@ Item {
                 ? Color.accent
                 : Util.alpha(root.foreground, rowFocus ? 0.28 : 0.12)
               Text {
+                textFormat: Text.PlainText
                 id: folderLab
                 anchors.centerIn: parent
                 text: {
@@ -483,6 +485,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           visible: root.focusRow === "themes" || root.themeFilter.length > 0
           anchors.horizontalCenter: parent.horizontalCenter
           width: parent.width
@@ -607,6 +610,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         id: selectedLabel
         anchors.top: carousel.bottom
         anchors.topMargin: Style.space(12)
@@ -635,6 +639,7 @@ Item {
         border.width: 1
         border.color: Util.alpha(root.foreground, 0.14)
         Text {
+          textFormat: Text.PlainText
           id: hintText
           anchors.centerIn: parent
           text: "↑ folders   ↓ themes   ←/→ move   type to filter   Enter apply   Esc close"
@@ -665,6 +670,7 @@ Item {
             spacing: Style.space(12)
             width: 400
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               wrapMode: Text.WordWrap
               text: {
@@ -681,7 +687,7 @@ Item {
                 height: Style.space(30)
                 radius: Style.cornerRadius
                 color: Util.alpha(root.foreground, 0.08)
-                Text { anchors.centerIn: parent; text: "Cancel"; color: root.foreground; font.family: Style.font.family }
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Cancel"; color: root.foreground; font.family: Style.font.family }
                 MouseArea { anchors.fill: parent; onClicked: if (root.service) root.service.cancelManualApply() }
               }
               Rectangle {
@@ -690,6 +696,7 @@ Item {
                 radius: Style.cornerRadius
                 color: Util.alpha(root.selectedBorder, 0.28)
                 Text {
+                  textFormat: Text.PlainText
                   id: applyStopLab
                   anchors.centerIn: parent
                   text: "Apply and stop schedule"

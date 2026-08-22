@@ -68,8 +68,10 @@ Item {
 
   function saveConfig(next) {
     var pruned = Model.pruneConfig(next, root.themes)
+    var payload = JSON.stringify(pruned)
+    if (payload.length > Model.maxConfigChars()) return
     root.config = pruned
-    configWriter.command = [scriptPath("config"), "write", JSON.stringify(pruned)]
+    configWriter.command = [scriptPath("config"), "write", payload]
     configWriter.running = true
   }
 
@@ -708,7 +710,9 @@ Item {
       waitForEnd: true
       onStreamFinished: {
         try {
-          var parsed = JSON.parse(String(text || "[]"))
+          var raw = String(text || "")
+          if (raw.length > Model.maxCatalogChars()) return
+          var parsed = Model.boundCatalog(JSON.parse(raw || "[]"))
           if (Array.isArray(parsed)) {
             var cur = ""
             for (var i = 0; i < parsed.length; i++) if (parsed[i].current) cur = parsed[i].slug
@@ -866,7 +870,9 @@ Item {
     printErrors: false
     onLoaded: {
       try {
-        root.config = Model.normalizeConfig(JSON.parse(String(text() || "{}")))
+        var raw = String(text() || "")
+        if (raw.length > Model.maxConfigChars()) throw "config too large"
+        root.config = Model.normalizeConfig(JSON.parse(raw || "{}"))
       } catch (e) {
         root.config = Model.defaultConfig()
       }

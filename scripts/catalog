@@ -7,11 +7,26 @@ USER_THEMES_PATH="$HOME/.config/omarchy/themes"
 OMARCHY_THEMES_PATH="${OMARCHY_PATH:-/usr/share/omarchy}/themes"
 CURRENT_THEME=$(tr -d '\n' <"$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null || true)
 CURRENT_BG=$(readlink -f "$HOME/.local/state/omarchy/current/background" 2>/dev/null || true)
+MAX_THEMES=256
+MAX_BACKGROUNDS=48
+MAX_PATH_BYTES=512
+MAX_JSON_BYTES=1048576
 
 runtime_dir=${XDG_RUNTIME_DIR:-$HOME/.cache/omarchy}
 mkdir -p "$runtime_dir"
 tmp=$(mktemp "$runtime_dir/themebook-catalog.XXXXXX")
 trap 'rm -f "$tmp"' EXIT
+theme_count=0
+
+json_room() {
+  local size=0
+  [[ -f $tmp ]] && size=$(stat -c%s "$tmp")
+  (( size < MAX_JSON_BYTES ))
+}
+
+short_path() {
+  (( ${#1} <= MAX_PATH_BYTES ))
+}
 
 path_allowed() {
   local file=$1
@@ -39,20 +54,20 @@ find_preview() {
   local preview_name candidate
   for preview_name in preview.png preview.jpg preview.jpeg preview.webp preview.gif preview.bmp; do
     candidate=$theme_path/$preview_name
-    if [[ -f $candidate ]] && path_allowed "$candidate" "$slug"; then
+    if [[ -f $candidate ]] && short_path "$candidate" && path_allowed "$candidate" "$slug"; then
       realpath -e "$candidate"
       return
     fi
   done
   if [[ -d $theme_path/backgrounds ]]; then
     while IFS= read -r candidate; do
-      if path_allowed "$candidate" "$slug"; then
+      if short_path "$candidate" && path_allowed "$candidate" "$slug"; then
         realpath -e "$candidate"
         return
       fi
     done < <(find -P "$theme_path/backgrounds" -maxdepth 1 -type f \
       \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) \
-      -print 2>/dev/null | sort)
+      -print 2>/dev/null | sort | head -n "$MAX_BACKGROUNDS")
   fi
   if [[ -f $theme_path/colors.toml ]]; then
     make_swatch "$slug" "$theme_path/colors.toml"
@@ -73,7 +88,8 @@ list_backgrounds() {
       find -P "$theme_path/backgrounds" -maxdepth 1 -type f \
         \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) -print
     fi
-  } 2>/dev/null | sort -u | while IFS= read -r candidate; do
+  } 2>/dev/null | sort -u | head -n "$MAX_BACKGROUNDS" | while IFS= read -r candidate; do
+    short_path "$candidate" || continue
     if path_allowed "$candidate" "$slug"; then
       realpath -e "$candidate"
     fi
@@ -164,8 +180,11 @@ emit_theme() {
   [[ $slug == "$CURRENT_THEME" ]] && is_current=true
   [[ -d $theme_path/.git ]] && is_git=true
 
+  json_room || return
+  (( theme_count < MAX_THEMES )) || return
   if command -v jq >/dev/null 2>&1; then
-    bg_json=$(list_backgrounds "$theme_path" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+    bg_json=$(list_backgrounds "$theme_path" | jq -R -s -c --argjson max "$MAX_BACKGROUNDS" \
+      'split("\n") | map(select(length > 0 and length <= 512)) | .[:$max]')
   fi
 
   jq -cn \
@@ -215,13 +234,14 @@ emit_theme() {
         magenta: $magenta
       }
     }' >>"$tmp"
+  (( theme_count++ ))
 }
 
 user_themes=()
 if [[ -d $USER_THEMES_PATH ]]; then
   while IFS= read -r theme_path; do
     user_themes+=("${theme_path##*/}")
-  done < <(find -L "$USER_THEMES_PATH" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -print 2>/dev/null | sort)
+  done < <(find -L "$USER_THEMES_PATH" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -print 2>/dev/null | sort | head -n "$MAX_THEMES")
 fi
 
 if [[ -d $OMARCHY_THEMES_PATH ]]; then
@@ -237,11 +257,15 @@ if [[ -d $OMARCHY_THEMES_PATH ]]; then
     if [[ $skip == false ]]; then
       emit_theme "$slug" "$theme_path" "stock"
     fi
-  done < <(find -L "$OMARCHY_THEMES_PATH" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort)
+  done < <(find -L "$OMARCHY_THEMES_PATH" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort | head -n "$MAX_THEMES")
 fi
 
 for slug in "${user_themes[@]}"; do
   emit_theme "$slug" "$USER_THEMES_PATH/$slug" "user"
 done
 
-jq -s 'sort_by(.name)' "$tmp"
+if ! json_room; then
+  printf '[]\n'
+  exit 0
+fi
+jq -s --argjson max "$MAX_THEMES" 'sort_by(.name) | .[:$max]' "$tmp"

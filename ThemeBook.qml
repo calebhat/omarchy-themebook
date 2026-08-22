@@ -635,6 +635,7 @@ Item {
           spacing: Style.space(10)
 
           Text {
+            textFormat: Text.PlainText
             text: "ThemeBook"
             color: root.fg
             font.family: root.fontFamily
@@ -663,6 +664,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             text: svc && svc.currentSlug ? ("Current: " + (Model.themeBySlug(root.themes, svc.currentSlug) || { name: svc.currentSlug }).name) : ""
             color: root.accent
             font.family: root.fontFamily
@@ -678,6 +680,7 @@ Item {
             border.width: root.mainView === "schedule" || Model.isScheduleActive(root.config) ? 1 : 0
             border.color: root.accent
             Text {
+              textFormat: Text.PlainText
               id: schedBtn
               anchors.centerIn: parent
               text: root.mainView === "schedule" ? "Themes" : "Schedule"
@@ -713,6 +716,7 @@ Item {
           border.width: 1
           border.color: root.accent
           Text {
+            textFormat: Text.PlainText
             id: schedBannerLab
             anchors.fill: parent
             anchors.margins: Style.space(8)
@@ -746,6 +750,7 @@ Item {
               border.color: (svc && svc.filter === modelData.id) ? root.accent : Util.alpha(root.fg, 0.12)
 
               Text {
+                textFormat: Text.PlainText
                 id: chipText
                 anchors.centerIn: parent
                 text: modelData.label
@@ -783,6 +788,7 @@ Item {
                 radius: Style.cornerRadius
                 color: Util.alpha(root.fg, 0.06)
                 Text {
+                  textFormat: Text.PlainText
                   id: collapseAllLabel
                   anchors.centerIn: parent
                   text: "Collapse all"
@@ -798,6 +804,7 @@ Item {
                 radius: Style.cornerRadius
                 color: Util.alpha(root.fg, 0.06)
                 Text {
+                  textFormat: Text.PlainText
                   id: expandAllLabel
                   anchors.centerIn: parent
                   text: "Expand all"
@@ -813,6 +820,7 @@ Item {
                 radius: Style.cornerRadius
                 color: Util.alpha(root.fg, 0.06)
                 Text {
+                  textFormat: Text.PlainText
                   id: newFolderLabel
                   anchors.centerIn: parent
                   text: "New folder"
@@ -849,6 +857,7 @@ Item {
                     border.width: 1
                     border.color: root.fg
                     Text {
+                      textFormat: Text.PlainText
                       anchors.centerIn: parent
                       visible: !!(root.config.picker && root.config.picker.replaceDefault)
                       text: "✓"
@@ -858,6 +867,7 @@ Item {
                     }
                   }
                   Text {
+                    textFormat: Text.PlainText
                     text: "Theme menu"
                     color: root.fg
                     font.family: root.fontFamily
@@ -883,6 +893,7 @@ Item {
               border.width: 1
               border.color: Util.alpha(root.fg, 0.16)
               Text {
+                textFormat: Text.PlainText
                 anchors.fill: parent
                 anchors.leftMargin: Style.space(8)
                 anchors.rightMargin: Style.space(8)
@@ -976,6 +987,7 @@ Item {
                     radius: Style.cornerRadius
                     color: Util.alpha(root.fg, 0.08)
                     Text {
+                      textFormat: Text.PlainText
                       anchors.centerIn: parent
                       text: "≡"
                       color: root.muted
@@ -1005,6 +1017,7 @@ Item {
                     }
                   }
                   Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     elide: Text.ElideRight
                     text: (modelData.collapsed ? "▸ " : "▾ ") + (modelData.title || "") + " (" + String(modelData.themeCount != null ? modelData.themeCount : 0) + ")"
@@ -1029,6 +1042,7 @@ Item {
                     border.width: 1
                     border.color: root.folderActionId === modelData.id ? root.accent : Util.alpha(root.fg, 0.14)
                     Text {
+                      textFormat: Text.PlainText
                       anchors.centerIn: parent
                       text: "⋯"
                       color: root.fg
@@ -1080,6 +1094,7 @@ Item {
                             radius: Style.cornerRadius
                             color: actHover.containsMouse ? Util.alpha(root.accent, 0.16) : "transparent"
                             Text {
+                              textFormat: Text.PlainText
                               id: actLab
                               anchors.verticalCenter: parent.verticalCenter
                               anchors.left: parent.left
@@ -1139,6 +1154,7 @@ Item {
                         border.width: 1
                         border.color: root.fg
                         Text {
+                          textFormat: Text.PlainText
                           anchors.centerIn: parent
                           visible: root.folderShowsInPicker(modelData.id)
                           text: "✓"
@@ -1148,6 +1164,7 @@ Item {
                         }
                       }
                       Text {
+                        textFormat: Text.PlainText
                         text: "Picker"
                         color: root.fg
                         font.family: root.fontFamily
@@ -1194,6 +1211,7 @@ Item {
                       sourceSize.height: 100
                     }
                     Text {
+                      textFormat: Text.PlainText
                       visible: !modelData.preview || thumb.status === Image.Error
                       anchors.centerIn: parent
                       text: "—"
@@ -1208,6 +1226,7 @@ Item {
                     width: parent.width - Style.space(118)
                     spacing: 2
                     Text {
+                      textFormat: Text.PlainText
                       width: parent.width
                       text: (modelData.name || modelData.slug || "")
                       elide: Text.ElideRight
@@ -1217,6 +1236,7 @@ Item {
                       font.bold: modelData.current === true
                     }
                     Text {
+                      textFormat: Text.PlainText
                       text: (modelData.source === "user" ? "User" : "Stock") + (modelData.mode ? " · " + modelData.mode : "")
                       color: root.muted
                       font.family: root.fontFamily
@@ -1243,6 +1263,7 @@ Item {
                   z: 3
                   color: starMouse.containsMouse ? Util.alpha(root.accent, 0.28) : "transparent"
                   Text {
+                    textFormat: Text.PlainText
                     anchors.centerIn: parent
                     text: root.config.favorites.indexOf(modelData.slug) >= 0 ? "★" : "☆"
                     color: root.config.favorites.indexOf(modelData.slug) >= 0 ? root.accent : root.muted
@@ -1292,6 +1313,7 @@ Item {
                   sourceSize.height: 540
                 }
                 Text {
+                  textFormat: Text.PlainText
                   visible: !root.selected || !root.selected.preview || hero.status === Image.Error
                   anchors.centerIn: parent
                   text: !root.selected ? "Select a theme" : "No preview"
@@ -1301,6 +1323,7 @@ Item {
               }
 
               Text {
+                textFormat: Text.PlainText
                 text: root.selected ? root.selected.name : ""
                 color: root.fg
                 font.family: root.fontFamily
@@ -1309,6 +1332,7 @@ Item {
               }
 
               Text {
+                textFormat: Text.PlainText
                 visible: !!root.selected
                 text: {
                   if (!root.selected) return ""
@@ -1343,6 +1367,7 @@ Item {
               }
 
               Text {
+                textFormat: Text.PlainText
                 visible: root.selected && root.selected.backgrounds && root.selected.backgrounds.length
                 text: "Backgrounds — pin one as default for apply and picker preview"
                 color: root.muted
@@ -1391,6 +1416,7 @@ Item {
                     radius: Style.cornerRadius
                     color: Util.alpha(root.bg, 0.72)
                     Text {
+                      textFormat: Text.PlainText
                       anchors.centerIn: parent
                       text: isDefault ? "★" : "☆"
                       color: isDefault ? root.accent : root.muted
@@ -1434,6 +1460,7 @@ Item {
                     radius: Style.cornerRadius
                     color: modelData.id === "apply" ? Util.alpha(root.accent, 0.28) : Util.alpha(root.fg, 0.08)
                     Text {
+                      textFormat: Text.PlainText
                       id: btnLabel
                       anchors.centerIn: parent
                       text: {
@@ -1470,6 +1497,7 @@ Item {
                 visible: root.folderMenuOpen
                 spacing: Style.space(4)
                 Text {
+                  textFormat: Text.PlainText
                   text: "Move to"
                   color: root.muted
                   font.family: root.fontFamily
@@ -1479,6 +1507,7 @@ Item {
                   model: root.folderChoices
                   delegate: Text {
                     required property var modelData
+                    textFormat: Text.PlainText
                     text: "→ " + modelData.name
                     color: root.fg
                     font.family: root.fontFamily
@@ -1494,6 +1523,7 @@ Item {
                   }
                 }
                 Text {
+                  textFormat: Text.PlainText
                   text: "+ New folder"
                   color: root.accent
                   font.family: root.fontFamily
@@ -1525,6 +1555,7 @@ Item {
           RowLayout {
             Layout.fillWidth: true
             Text {
+              textFormat: Text.PlainText
               text: "Schedule"
               color: root.fg
               font.family: root.fontFamily
@@ -1539,6 +1570,7 @@ Item {
               radius: Style.cornerRadius
               color: Util.alpha(root.fg, 0.08)
               Text {
+                textFormat: Text.PlainText
                 id: clockLab
                 anchors.centerIn: parent
                 text: root.config.clock12 ? "12-hour" : "24-hour"
@@ -1554,6 +1586,7 @@ Item {
             }
           }
           Text {
+            textFormat: Text.PlainText
             visible: !!(svc && svc.otherSchedulerEnabled)
             text: "Another theme scheduler is enabled — ThemeBook stays off."
             color: root.muted
@@ -1595,6 +1628,7 @@ Item {
                     border.width: 1
                     border.color: selected ? root.accent : root.fg
                     Text {
+                      textFormat: Text.PlainText
                       anchors.centerIn: parent
                       visible: selected
                       text: "✓"
@@ -1604,6 +1638,7 @@ Item {
                     }
                   }
                   Text {
+                    textFormat: Text.PlainText
                     text: modelData.label
                     color: root.fg
                     font.family: root.fontFamily
@@ -1620,6 +1655,7 @@ Item {
             }
           }
           Text {
+            textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: root.scheduleModeId() === "off"
@@ -1641,6 +1677,7 @@ Item {
               spacing: Style.space(10)
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.WordWrap
                 text: root.scheduleModeId() === "themes"
@@ -1655,6 +1692,7 @@ Item {
                 visible: root.scheduleModeId() === "themes"
                 spacing: Style.space(8)
                 Text {
+                  textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
                   width: 72
                   text: "Folder"
@@ -1670,6 +1708,7 @@ Item {
                   border.width: 1
                   border.color: Util.alpha(root.fg, 0.14)
                   Text {
+                    textFormat: Text.PlainText
                     anchors.fill: parent
                     anchors.leftMargin: Style.space(8)
                     anchors.rightMargin: Style.space(8)
@@ -1694,6 +1733,7 @@ Item {
               Row {
                 spacing: Style.space(8)
                 Text {
+                  textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
                   width: 72
                   text: root.scheduleModeId() === "themes" ? "Themes" : "Every"
@@ -1725,6 +1765,7 @@ Item {
                   }
                 }
                 Text {
+                  textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
                   text: "minutes"
                   color: root.muted
@@ -1752,6 +1793,7 @@ Item {
                     border.width: 1
                     border.color: root.fg
                     Text {
+                      textFormat: Text.PlainText
                       anchors.centerIn: parent
                       visible: !!(root.config.themeCycle && root.config.themeCycle.wallpaperEnabled)
                       text: "✓"
@@ -1761,6 +1803,7 @@ Item {
                     }
                   }
                   Text {
+                    textFormat: Text.PlainText
                     id: nestedWpLab
                     text: "Also cycle wallpapers"
                     color: root.fg
@@ -1781,6 +1824,7 @@ Item {
                 visible: root.scheduleModeId() === "themes"
                 spacing: Style.space(8)
                 Text {
+                  textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
                   width: 72
                   text: "Wallpapers"
@@ -1808,6 +1852,7 @@ Item {
                   }
                 }
                 Text {
+                  textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
                   text: "minutes"
                   color: root.muted
@@ -1824,6 +1869,7 @@ Item {
               spacing: Style.space(12)
 
           Text {
+            textFormat: Text.PlainText
             text: config.schedule.mode === "sun"
               ? "Sunrise and sunset use your weather location. Pick a theme for each. Expand a row to cycle wallpapers while that period is active."
               : "Type a time and pick a theme. ThemeBook applies the latest Timed Theme whose time has already passed. Expand a row to cycle wallpapers for that theme."
@@ -1844,6 +1890,7 @@ Item {
               radius: Style.cornerRadius
               color: Util.alpha(root.fg, 0.08)
               Text {
+                textFormat: Text.PlainText
                 id: expandAllLab
                 anchors.centerIn: parent
                 text: root.scheduleAllExpanded() ? "Collapse all" : "Expand all"
@@ -1865,6 +1912,7 @@ Item {
             Layout.rightMargin: Style.space(8)
             spacing: Style.space(8)
             Text {
+              textFormat: Text.PlainText
               Layout.preferredWidth: 96
               text: config.schedule.mode === "sun" ? "When" : "Time"
               color: root.muted
@@ -1872,6 +1920,7 @@ Item {
               font.pixelSize: Style.font.caption
             }
             Text {
+              textFormat: Text.PlainText
               visible: !!root.config.clock12
               Layout.preferredWidth: 52
               text: config.schedule.mode === "sun" ? "" : "AM/PM"
@@ -1880,6 +1929,7 @@ Item {
               font.pixelSize: Style.font.caption
             }
             Text {
+              textFormat: Text.PlainText
               Layout.fillWidth: true
               text: "Theme"
               color: root.muted
@@ -1887,6 +1937,7 @@ Item {
               font.pixelSize: Style.font.caption
             }
             Text {
+              textFormat: Text.PlainText
               Layout.preferredWidth: 64
               horizontalAlignment: Text.AlignHCenter
               text: config.schedule.mode === "sun" ? "" : "On"
@@ -1895,6 +1946,7 @@ Item {
               font.pixelSize: Style.font.caption
             }
             Text {
+              textFormat: Text.PlainText
               Layout.preferredWidth: 80
               horizontalAlignment: Text.AlignHCenter
               text: ""
@@ -1983,6 +2035,7 @@ Item {
                       border.width: 1
                       border.color: root.isSchedFocus(index, "ampm") ? root.accent : Util.alpha(root.fg, 0.14)
                       Text {
+                        textFormat: Text.PlainText
                         anchors.centerIn: parent
                         text: rule && Model.hourIsPm(rule.time) ? "PM" : "AM"
                         color: root.fg
@@ -2004,6 +2057,7 @@ Item {
                       border.width: 1
                       border.color: root.isSchedFocus(index, "theme") ? root.accent : Util.alpha(root.fg, 0.14)
                       Text {
+                        textFormat: Text.PlainText
                         anchors.fill: parent
                         anchors.leftMargin: Style.space(8)
                         anchors.rightMargin: Style.space(8)
@@ -2027,6 +2081,7 @@ Item {
                       border.width: 1
                       border.color: root.isSchedFocus(index, "on") ? root.accent : "transparent"
                       Text {
+                        textFormat: Text.PlainText
                         anchors.centerIn: parent
                         text: rule && rule.enabled ? "On" : "Off"
                         color: root.fg
@@ -2046,6 +2101,7 @@ Item {
                       border.width: 1
                       border.color: root.isSchedFocus(index, "remove") ? root.accent : "transparent"
                       Text {
+                        textFormat: Text.PlainText
                         anchors.centerIn: parent
                         text: "Remove"
                         color: root.fg
@@ -2069,6 +2125,7 @@ Item {
                       radius: Style.cornerRadius
                       color: expanded ? Util.alpha(root.accent, 0.28) : Util.alpha(root.fg, 0.08)
                       Text {
+                        textFormat: Text.PlainText
                         anchors.centerIn: parent
                         text: expanded ? "▼" : "▶"
                         color: (rule && rule.wallpaperEnabled) ? root.accent : root.muted
@@ -2089,6 +2146,7 @@ Item {
                     height: Style.space(44)
                     spacing: Style.space(8)
                     Text {
+                      textFormat: Text.PlainText
                       anchors.verticalCenter: parent.verticalCenter
                       text: "Wallpapers"
                       color: root.muted
@@ -2114,6 +2172,7 @@ Item {
                           border.width: 1
                           border.color: root.fg
                           Text {
+                            textFormat: Text.PlainText
                             anchors.centerIn: parent
                             visible: !!(rule && rule.wallpaperEnabled)
                             text: "✓"
@@ -2123,6 +2182,7 @@ Item {
                           }
                         }
                         Text {
+                          textFormat: Text.PlainText
                           id: wpOnLab
                           text: rule && rule.wallpaperEnabled ? "On" : "Off"
                           color: root.fg
@@ -2159,6 +2219,7 @@ Item {
                       }
                     }
                     Text {
+                      textFormat: Text.PlainText
                       anchors.verticalCenter: parent.verticalCenter
                       text: "minutes"
                       color: root.muted
@@ -2198,6 +2259,7 @@ Item {
                     height: Style.space(44)
                     spacing: Style.space(8)
                     Text {
+                      textFormat: Text.PlainText
                       Layout.preferredWidth: 96
                       text: modelData.label
                       color: root.fg
@@ -2215,6 +2277,7 @@ Item {
                       border.width: 1
                       border.color: root.isSchedFocus(index, "theme") ? root.accent : Util.alpha(root.fg, 0.14)
                       Text {
+                        textFormat: Text.PlainText
                         anchors.fill: parent
                         anchors.leftMargin: Style.space(8)
                         anchors.rightMargin: Style.space(8)
@@ -2237,6 +2300,7 @@ Item {
                       radius: Style.cornerRadius
                       color: expanded ? Util.alpha(root.accent, 0.28) : Util.alpha(root.fg, 0.08)
                       Text {
+                        textFormat: Text.PlainText
                         anchors.centerIn: parent
                         text: expanded ? "▼" : "▶"
                         color: wpOn ? root.accent : root.muted
@@ -2257,6 +2321,7 @@ Item {
                     height: Style.space(44)
                     spacing: Style.space(8)
                     Text {
+                      textFormat: Text.PlainText
                       anchors.verticalCenter: parent.verticalCenter
                       text: "Wallpapers"
                       color: root.muted
@@ -2272,6 +2337,7 @@ Item {
                       border.width: 1
                       border.color: wpOn ? root.accent : Util.alpha(root.fg, 0.14)
                       Text {
+                        textFormat: Text.PlainText
                         anchors.centerIn: parent
                         text: wpOn ? "On" : "Off"
                         color: root.fg
@@ -2309,6 +2375,7 @@ Item {
                       }
                     }
                     Text {
+                      textFormat: Text.PlainText
                       anchors.verticalCenter: parent.verticalCenter
                       text: "minutes"
                       color: root.muted
@@ -2329,6 +2396,7 @@ Item {
                 border.width: root.scheduleCursor === root.scheduleViewIds.length ? 1 : 0
                 border.color: root.accent
                 Text {
+                  textFormat: Text.PlainText
                   id: addRuleLab
                   anchors.centerIn: parent
                   text: "Add time"
@@ -2358,6 +2426,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           Layout.fillWidth: true
           text: root.mainView === "schedule"
             ? "Esc catalog   Tab mode   C 12/24   ↑/↓ row   ←/→ field   Enter activate   A add time"
@@ -2390,6 +2459,7 @@ Item {
             anchors.centerIn: parent
             spacing: Style.space(10)
             Text {
+              textFormat: Text.PlainText
               text: root.promptKind === "rename" ? "Rename folder" : "New folder"
               color: root.fg
               font.family: root.fontFamily
@@ -2411,6 +2481,7 @@ Item {
                 radius: Style.cornerRadius
                 color: Util.alpha(root.fg, 0.08)
                 Text {
+                  textFormat: Text.PlainText
                   id: cancelLabel
                   anchors.centerIn: parent
                   text: "Cancel"
@@ -2426,6 +2497,7 @@ Item {
                 radius: Style.cornerRadius
                 color: Util.alpha(root.accent, 0.28)
                 Text {
+                  textFormat: Text.PlainText
                   id: okLabel
                   anchors.centerIn: parent
                   text: root.promptKind === "rename" ? "Rename" : "Create"
@@ -2460,6 +2532,7 @@ Item {
             spacing: Style.space(12)
             width: 400
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               wrapMode: Text.WordWrap
               text: {
@@ -2476,7 +2549,7 @@ Item {
                 height: Style.space(30)
                 radius: Style.cornerRadius
                 color: Util.alpha(root.fg, 0.08)
-                Text { anchors.centerIn: parent; text: "Cancel"; color: root.fg; font.family: root.fontFamily }
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Cancel"; color: root.fg; font.family: root.fontFamily }
                 MouseArea { anchors.fill: parent; onClicked: if (svc) svc.cancelManualApply() }
               }
               Rectangle {
@@ -2485,6 +2558,7 @@ Item {
                 radius: Style.cornerRadius
                 color: Util.alpha(root.accent, 0.28)
                 Text {
+                  textFormat: Text.PlainText
                   id: applyStopLab
                   anchors.centerIn: parent
                   text: "Apply and stop schedule"
@@ -2520,6 +2594,7 @@ Item {
             spacing: Style.space(12)
             width: 380
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               wrapMode: Text.WordWrap
               text: root.selected ? ("Remove user theme “" + root.selected.name + "”? This deletes that theme from your user themes folder.") : "Remove this user theme from disk?"
@@ -2533,7 +2608,7 @@ Item {
                 height: Style.space(30)
                 radius: Style.cornerRadius
                 color: Util.alpha(root.fg, 0.08)
-                Text { anchors.centerIn: parent; text: "Cancel"; color: root.fg; font.family: root.fontFamily }
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Cancel"; color: root.fg; font.family: root.fontFamily }
                 MouseArea { anchors.fill: parent; onClicked: root.confirmRemove = false }
               }
               Rectangle {
@@ -2541,7 +2616,7 @@ Item {
                 height: Style.space(30)
                 radius: Style.cornerRadius
                 color: Util.alpha(root.accent, 0.28)
-                Text { anchors.centerIn: parent; text: "Remove"; color: root.fg; font.family: root.fontFamily }
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Remove"; color: root.fg; font.family: root.fontFamily }
                 MouseArea {
                   anchors.fill: parent
                   onClicked: {
@@ -2574,6 +2649,7 @@ Item {
             spacing: Style.space(12)
             width: 380
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               wrapMode: Text.WordWrap
               text: "Delete folder “" + root.confirmFolderName + "”? Themes stay installed; they just leave this folder."
@@ -2587,7 +2663,7 @@ Item {
                 height: Style.space(30)
                 radius: Style.cornerRadius
                 color: Util.alpha(root.fg, 0.08)
-                Text { anchors.centerIn: parent; text: "Cancel"; color: root.fg; font.family: root.fontFamily }
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Cancel"; color: root.fg; font.family: root.fontFamily }
                 MouseArea { anchors.fill: parent; onClicked: root.confirmFolderId = "" }
               }
               Rectangle {
@@ -2595,7 +2671,7 @@ Item {
                 height: Style.space(30)
                 radius: Style.cornerRadius
                 color: Util.alpha(root.accent, 0.28)
-                Text { anchors.centerIn: parent; text: "Delete"; color: root.fg; font.family: root.fontFamily }
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Delete"; color: root.fg; font.family: root.fontFamily }
                 MouseArea {
                   anchors.fill: parent
                   onClicked: {
@@ -2629,6 +2705,7 @@ Item {
             anchors.margins: Style.space(14)
             spacing: Style.space(8)
             Text {
+              textFormat: Text.PlainText
               text: "Folder"
               color: root.fg
               font.family: root.fontFamily
@@ -2646,6 +2723,7 @@ Item {
                 radius: Style.cornerRadius
                 color: cycleFolderMouse.containsMouse ? Util.alpha(root.accent, 0.16) : "transparent"
                 Text {
+                  textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
                   anchors.left: parent.left
                   anchors.leftMargin: Style.space(8)
@@ -2693,6 +2771,7 @@ Item {
             anchors.margins: Style.space(14)
             spacing: Style.space(8)
             Text {
+              textFormat: Text.PlainText
               text: "Choose theme"
               color: root.fg
               font.family: root.fontFamily
@@ -2726,6 +2805,7 @@ Item {
                 color: themePickMouse.containsMouse ? Util.alpha(root.accent, 0.16) : "transparent"
                 radius: Style.cornerRadius
                 Text {
+                  textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
                   anchors.left: parent.left
                   anchors.leftMargin: Style.space(8)

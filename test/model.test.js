@@ -3,7 +3,7 @@ const fs = require("fs")
 const path = require("path")
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
   .replace(/^\.pragma library\s*/, "")
-eval(src + "\nmodule.exports = { defaultConfig, normalizeConfig, flatten, clockPeriod, bumpHHMM, pruneConfig, toggleInList, moveInList, isValidSlug, isReservedSection, currentPeriod, sanitizeFolderName, isCollapsed, activeRule, themeSlugForBackground, moveFolderIds, parseTimeInput, formatTimeDisplay, formatHourMinute, hourIsPm, applyMeridiem, parseClockTime, pickerSections, fuzzyMatch, minutesOf, moveIdBefore, wallpaperCyclePaths, nextWallpaper, cycleFolderChoices, isReorderableSection, themeWallpaperPaths, cycleIntervalMs, cycleSlugs, syncThemeCycleState, activeWallpaperSpec, isScheduleActive, scheduleActiveLabel, defaultWallpaper, applyDefaultPreviews }")
+eval(src + "\nmodule.exports = { defaultConfig, normalizeConfig, flatten, clockPeriod, bumpHHMM, pruneConfig, toggleInList, moveInList, isValidSlug, isReservedSection, currentPeriod, sanitizeFolderName, isCollapsed, activeRule, themeSlugForBackground, moveFolderIds, parseTimeInput, formatTimeDisplay, formatHourMinute, hourIsPm, applyMeridiem, parseClockTime, pickerSections, fuzzyMatch, minutesOf, moveIdBefore, wallpaperCyclePaths, nextWallpaper, cycleFolderChoices, isReorderableSection, themeWallpaperPaths, cycleIntervalMs, cycleSlugs, syncThemeCycleState, activeWallpaperSpec, isScheduleActive, scheduleActiveLabel, defaultWallpaper, applyDefaultPreviews, boundCatalog }")
 
 const m = module.exports
 const cfg = m.normalizeConfig({
@@ -122,6 +122,16 @@ if (m.defaultWallpaper(cfgDef, themed) !== "/b.png") throw new Error("default wa
 if (m.applyDefaultPreviews([themed], cfgDef)[0].preview !== "/b.png") throw new Error("preview uses default")
 const prunedDef = m.pruneConfig({ defaultWallpapers: { nord: "/missing.png", gone: "/a.png" } }, [themed])
 if (prunedDef.defaultWallpapers.nord || prunedDef.defaultWallpapers.gone) throw new Error("prune bad defaults")
+const many = []
+for (let i = 0; i < 300; i++) {
+  const bgs = []
+  for (let j = 0; j < 60; j++) bgs.push("/bg" + j + ".png")
+  many.push({ slug: "t" + i, name: "n".repeat(200), backgrounds: bgs })
+}
+const capped = m.boundCatalog(many)
+if (capped.length !== 256) throw new Error("bound catalog length " + capped.length)
+if (capped[0].name.length > 80) throw new Error("bound name")
+if (capped[0].backgrounds.length !== 48) throw new Error("bound bgs " + capped[0].backgrounds.length)
 if (m.activeWallpaperSpec(keptMin, "day", 8 * 60).on) throw new Error("wallpaper off while rule wallpaper disabled")
 const expanded = m.normalizeConfig(Object.assign({}, withRecents, { collapsed: { recents: false } }))
 const expRows = m.flatten(themes, expanded, "all", "")
