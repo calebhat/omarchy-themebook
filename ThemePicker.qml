@@ -116,10 +116,13 @@ Item {
     for (var i = 0; i < themes.length; i++) {
       var t = themes[i]
       var prev = root.previewFor(t)
+      var thumb = t.thumbnail || ""
+      if (!thumb || thumb === t.preview) thumb = prev || t.preview || ""
+      else if (prev && thumb.indexOf("/omarchy/image-selector/") < 0) thumb = prev
       arr.push({
         filePath: prev,
         fileName: t.slug,
-        thumbnailPath: prev || t.thumbnail || t.preview || "",
+        thumbnailPath: thumb,
         slug: t.slug,
         name: t.name || t.slug
       })
@@ -151,7 +154,8 @@ Item {
   }
 
   function open() {
-    if (service) service.reloadCatalog()
+    if (service && (!service.themes || !service.themes.length))
+      service.reloadCatalog()
     var p = service && service.config ? service.config.picker : null
     var def = p && p.defaultFolder ? p.defaultFolder : "all"
     folderId = (p && p.lastFolder) ? p.lastFolder : (def || "all")
@@ -574,9 +578,11 @@ Item {
                 anchors.fill: parent
                 source: item.sourceActivated && imageData && imageData.thumbnailPath ? Util.fileUrl(imageData.thumbnailPath) : ""
                 fillMode: Image.PreserveAspectCrop
-                asynchronous: false
+                asynchronous: !item.selected
                 cache: true
                 smooth: true
+                sourceSize.width: item.selected ? 960 : 240
+                sourceSize.height: item.selected ? 540 : 160
               }
               Rectangle {
                 anchors.fill: parent

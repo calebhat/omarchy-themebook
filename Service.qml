@@ -740,7 +740,7 @@ Item {
     stdout: StdioCollector { waitForEnd: true }
     onExited: {
       root.thumbsWarming = false
-      root.reloadCatalog()
+      root.catalogRevision++
     }
   }
 

@@ -481,8 +481,10 @@ function applyDefaultPreviews(themes, config) {
     for (var k in src) t[k] = src[k]
     var path = defaultWallpaper(config, t)
     if (path) {
+      var oldThumb = t.thumbnail
       t.preview = path
-      t.thumbnail = path
+      if (!oldThumb || oldThumb === src.preview)
+        t.thumbnail = path
     }
     out.push(t)
   }
