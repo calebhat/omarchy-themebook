@@ -120,6 +120,16 @@ const themed = { slug: "nord", preview: "/stock.png", backgrounds: ["/a.png", "/
 const cfgDef = m.normalizeConfig({ defaultWallpapers: { nord: "/b.png" } })
 if (m.defaultWallpaper(cfgDef, themed) !== "/b.png") throw new Error("default wallpaper")
 if (m.applyDefaultPreviews([themed], cfgDef)[0].preview !== "/b.png") throw new Error("preview uses default")
+const already = m.applyDefaultPreviews(
+  [{ slug: "nord", preview: "/b.png", thumbnail: "/cache/sel.jpg", backgrounds: ["/a.png", "/b.png"] }],
+  cfgDef
+)
+if (already[0].thumbnail !== "/cache/sel.jpg") throw new Error("keep jpeg thumb when preview is default")
+const switched = m.applyDefaultPreviews(
+  [{ slug: "nord", preview: "/stock.png", thumbnail: "/cache/old.jpg", backgrounds: ["/a.png", "/b.png"] }],
+  cfgDef
+)
+if (switched[0].preview !== "/b.png" || switched[0].thumbnail !== "/b.png") throw new Error("new default until thumb exists")
 const prunedDef = m.pruneConfig({ defaultWallpapers: { nord: "/missing.png", gone: "/a.png" } }, [themed])
 if (prunedDef.defaultWallpapers.nord || prunedDef.defaultWallpapers.gone) throw new Error("prune bad defaults")
 const many = []

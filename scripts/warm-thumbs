@@ -76,7 +76,8 @@ if (( $# >= 2 )); then
     ext=${ext,,}
     link=$PREVIEW_DIR/$slug.$ext
     ln -sfn "$image" "$link"
-    thumb_for "$link" >/dev/null
+    thumb=$(thumb_for "$link")
+    printf '%s\t%s\n' "$slug" "$thumb"
   done
 elif (( $# > 0 )); then
   for image in "$@"; do

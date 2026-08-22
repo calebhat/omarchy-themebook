@@ -117,8 +117,8 @@ Item {
       var t = themes[i]
       var prev = root.previewFor(t)
       var thumb = t.thumbnail || ""
-      if (!thumb || thumb === t.preview) thumb = prev || t.preview || ""
-      else if (prev && thumb.indexOf("/omarchy/image-selector/") < 0) thumb = prev
+      if (!thumb || thumb.indexOf("/omarchy/image-selector/") < 0)
+        thumb = prev || t.preview || thumb
       arr.push({
         filePath: prev,
         fileName: t.slug,

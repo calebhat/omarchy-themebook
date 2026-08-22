@@ -34,6 +34,15 @@ trap cleanup EXIT
 trap on_term TERM
 theme_count=0
 
+DEFAULTS_JSON="{}"
+cfg_file=$HOME/.config/omarchy/themebook.json
+if [[ -f $cfg_file ]]; then
+  cfg_size=$(stat -c%s "$cfg_file" 2>/dev/null || echo 0)
+  if (( cfg_size > 0 && cfg_size <= 262144 )); then
+    DEFAULTS_JSON=$(head -c 262144 "$cfg_file")
+  fi
+fi
+
 json_room() {
   local size=0
   [[ -f $tmp ]] && size=$(stat -c%s "$tmp")
@@ -166,6 +175,13 @@ emit_theme() {
   local bg_json='[]'
 
   preview=$(find_preview "$theme_path")
+  if [[ -n $DEFAULTS_JSON ]]; then
+    local def
+    def=$(jq -r --arg s "$slug" '(.defaultWallpapers // {})[$s] // empty' <<<"$DEFAULTS_JSON" 2>/dev/null || true)
+    if [[ -n $def && $def != null ]] && short_path "$def" && [[ -f $def ]] && path_allowed "$def" "$slug"; then
+      preview=$def
+    fi
+  fi
   local thumbnail=$preview
   if [[ -n $preview ]]; then
     local ext=${preview##*.}

@@ -737,11 +737,34 @@ Item {
 
   Process {
     id: thumbsProc
-    stdout: StdioCollector { waitForEnd: true }
-    onExited: {
-      root.thumbsWarming = false
-      root.catalogRevision++
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var lines = String(text || "").split("\n")
+        var list = root.themes.slice()
+        var changed = false
+        for (var i = 0; i < lines.length; i++) {
+          var parts = lines[i].split("\t")
+          if (parts.length < 2) continue
+          var slug = parts[0]
+          var thumb = String(parts[1] || "")
+          if (!slug || !thumb || thumb.indexOf("..") >= 0) continue
+          for (var j = 0; j < list.length; j++) {
+            if (list[j].slug !== slug) continue
+            var t = {}
+            for (var k in list[j]) t[k] = list[j][k]
+            t.thumbnail = thumb
+            list[j] = t
+            changed = true
+          }
+        }
+        if (changed) {
+          root.themes = list
+          root.catalogRevision++
+        }
+      }
     }
+    onExited: root.thumbsWarming = false
   }
 
   Process {
