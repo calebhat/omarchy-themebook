@@ -416,51 +416,70 @@ Item {
           height: Style.space(40)
           clip: true
 
-          Repeater {
-            model: root.folderTabs
-            delegate: Rectangle {
-              required property var modelData
-              required property int index
-              readonly property bool matched: root.folderMatches(index)
-              readonly property int rel: root.folderFilteredPos(index) - root.folderSelectedFilteredPos()
-              readonly property bool current: root.folderId === modelData.id
-              readonly property bool rowFocus: root.focusRow === "folders"
-              visible: matched && Math.abs(rel) <= 8
-              height: Style.space(36)
-              width: Math.max(Style.space(88), folderLab.implicitWidth + Style.space(20))
-              radius: Style.cornerRadius
-              x: folderStrip.width / 2 - width / 2 + rel * (width + Style.space(8))
-              y: 2
-              opacity: Math.max(0.12, 1 - Math.abs(rel) * 0.16)
-              z: current ? 10 : 5 - Math.abs(rel)
-              color: current
-                ? Util.alpha(Color.accent, rowFocus ? 0.42 : 0.22)
-                : Util.alpha(root.foreground, rowFocus ? 0.12 : 0.06)
-              border.width: current && rowFocus ? 2 : 1
-              border.color: current
-                ? Color.accent
-                : Util.alpha(root.foreground, rowFocus ? 0.28 : 0.12)
-              Text {
-                textFormat: Text.PlainText
-                id: folderLab
-                anchors.centerIn: parent
-                text: {
-                  var n = modelData.id === "all"
-                    ? (root.service && root.service.themes ? root.service.themes.length : 0)
-                    : (modelData.themes ? modelData.themes.length : 0)
-                  return modelData.name + " (" + n + ")"
+          Row {
+            id: folderRow
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(8)
+            x: {
+              var cx = 0
+              var cw = 0
+              var kids = folderRow.children
+              for (var i = 0; i < kids.length; i++) {
+                var ch = kids[i]
+                if (!ch || ch.current === undefined) continue
+                if (ch.current) {
+                  cx = ch.x
+                  cw = ch.width
+                  break
                 }
-                color: root.foreground
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                font.bold: current
               }
-              MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                  root.focusRow = "folders"
-                  root.setFolder(modelData.id)
+              return folderStrip.width / 2 - cx - cw / 2
+            }
+            Repeater {
+              model: {
+                var tabs = root.folderTabs
+                var out = []
+                for (var i = 0; i < tabs.length; i++)
+                  if (root.folderMatches(i)) out.push(tabs[i])
+                return out
+              }
+              delegate: Rectangle {
+                required property var modelData
+                required property int index
+                readonly property bool current: root.folderId === modelData.id
+                readonly property bool rowFocus: root.focusRow === "folders"
+                height: Style.space(36)
+                width: Math.max(Style.space(88), folderLab.implicitWidth + Style.space(20))
+                radius: Style.cornerRadius
+                color: current
+                  ? Util.alpha(Color.accent, rowFocus ? 0.42 : 0.22)
+                  : Util.alpha(root.foreground, rowFocus ? 0.12 : 0.06)
+                border.width: current && rowFocus ? 2 : 1
+                border.color: current
+                  ? Color.accent
+                  : Util.alpha(root.foreground, rowFocus ? 0.28 : 0.12)
+                Text {
+                  textFormat: Text.PlainText
+                  id: folderLab
+                  anchors.centerIn: parent
+                  text: {
+                    var n = modelData.id === "all"
+                      ? (root.service && root.service.themes ? root.service.themes.length : 0)
+                      : (modelData.themes ? modelData.themes.length : 0)
+                    return modelData.name + " (" + n + ")"
+                  }
+                  color: root.foreground
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  font.bold: current
+                }
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: {
+                    root.focusRow = "folders"
+                    root.setFolder(modelData.id)
+                  }
                 }
               }
             }
