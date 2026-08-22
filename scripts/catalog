@@ -3,6 +3,13 @@
 
 set -euo pipefail
 
+# One deadline for the whole producer: TERM, then KILL. Do not stack
+# a 5s find timeout per theme (256 × 5s would be unbounded in practice).
+if [[ ${THEMEBOOK_CATALOG_WRAPPED:-0} != 1 ]] && command -v timeout >/dev/null 2>&1; then
+  export THEMEBOOK_CATALOG_WRAPPED=1
+  exec timeout --signal=TERM --kill-after=2s 12s /bin/bash "$0" "$@"
+fi
+
 USER_THEMES_PATH="$HOME/.config/omarchy/themes"
 OMARCHY_THEMES_PATH="${OMARCHY_PATH:-/usr/share/omarchy}/themes"
 CURRENT_THEME=$(tr -d '\n' <"$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null || true)
@@ -11,18 +18,20 @@ MAX_THEMES=256
 MAX_BACKGROUNDS=48
 MAX_PATH_BYTES=512
 MAX_JSON_BYTES=1048576
-FIND_TIMEOUT=5
 
 capped_find() {
   local max=$1
   shift
-  timeout --signal=TERM "$FIND_TIMEOUT" "$@" 2>/dev/null | head -n "$max" || true
+  "$@" 2>/dev/null | head -n "$max" || true
 }
 
 runtime_dir=${XDG_RUNTIME_DIR:-$HOME/.cache/omarchy}
 mkdir -p "$runtime_dir"
 tmp=$(mktemp "$runtime_dir/themebook-catalog.XXXXXX")
-trap 'rm -f "$tmp"' EXIT
+cleanup() { rm -f "$tmp"; }
+on_term() { printf '[]\n'; cleanup; exit 0; }
+trap cleanup EXIT
+trap on_term TERM
 theme_count=0
 
 json_room() {
