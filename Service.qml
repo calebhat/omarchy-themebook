@@ -407,22 +407,40 @@ Item {
     saveConfig(next)
   }
 
-  function moveToFolder(slug, folderId) {
+  function knownMap() {
+    var map = {}
+    var list = root.themes || []
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].slug) map[list[i].slug] = true
+    }
+    return map
+  }
+
+  function addToFolder(slug, folderId) {
     if (!Model.isValidSlug(slug) || !knownTheme(slug)) return
-    var next = Model.normalizeConfig(root.config)
-    for (var i = 0; i < next.folders.length; i++) {
-      next.folders[i].themes = next.folders[i].themes.filter(function(s) { return s !== slug })
-    }
-    if (folderId && folderId !== "user" && folderId !== "stock" && folderId !== "favorites" && folderId !== "recents") {
-      for (var j = 0; j < next.folders.length; j++) {
-        if (next.folders[j].id === folderId) {
-          next.folders[j].themes.push(slug)
-          break
-        }
-      }
-    }
-    saveConfig(next)
+    saveConfig(Model.addSlugToFolder(root.config, folderId, slug))
     root.syncCycles()
+  }
+
+  function removeFromFolder(slug, folderId) {
+    if (!Model.isValidSlug(slug)) return
+    saveConfig(Model.dropSlugFromFolder(root.config, folderId, slug))
+    root.syncCycles()
+  }
+
+  function setFolderThemes(folderId, slugs) {
+    saveConfig(Model.replaceFolderThemes(root.config, folderId, slugs, root.knownMap()))
+    root.syncCycles()
+  }
+
+  function setThemeFolders(slug, folderIds) {
+    if (!Model.isValidSlug(slug) || !knownTheme(slug)) return
+    saveConfig(Model.setThemeFolders(root.config, slug, folderIds))
+    root.syncCycles()
+  }
+
+  function moveToFolder(slug, folderId) {
+    root.addToFolder(slug, folderId)
   }
 
   function setSchedule(patch) {
@@ -1010,7 +1028,17 @@ Item {
     }
 
     function moveTo(slug: string, folderId: string): string {
-      root.moveToFolder(slug, folderId)
+      root.addToFolder(slug, folderId)
+      return folderId
+    }
+
+    function addTo(slug: string, folderId: string): string {
+      root.addToFolder(slug, folderId)
+      return folderId
+    }
+
+    function removeFrom(slug: string, folderId: string): string {
+      root.removeFromFolder(slug, folderId)
       return folderId
     }
 

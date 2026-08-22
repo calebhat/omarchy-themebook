@@ -22,13 +22,13 @@ No sudo or pkexec is required. No network calls. No extra packages.
 - **Select then apply** — click a card to preview (colors, backgrounds, source, git); the desktop changes only on **Apply theme**, Enter, or double-click.
 - **Favorites** starred from the list or the preview; **Random favorite** applies one at random.
 - **Recents** is always listed (default: under Favorites), even when empty.
-- **Folders** you create (**New folder**), rename, and delete (confirmation; themes stay installed). Rename and Delete sit in a **⋯** menu on user folders so headers stay clean.
+- **Folders** you create (**New folder**), rename, and delete (confirmation; themes stay installed). **Add themes** on a user folder opens a checklist: check to add, uncheck to remove. **Move to folder** on a selected theme does the same from the theme side (a theme can be in more than one folder). **✕** on a theme row inside a folder removes it from that folder, next to Favorite. User and Stock still list every theme. Rename and Delete sit in a **⋯** menu on user folders.
 - **Reorder** any section — Favorites, Recents, User, Stock, and your folders — by dragging the **≡** handle. A line between folders shows the drop point. Order is saved in `themebook.json`. **Shift+↑/↓** sorts themes inside a folder; **Shift+←/→** moves sections.
 - **Picker** checkboxes on Favorites, Recents, User, Stock, and your folders choose which sections appear in the carousel.
 - **Filters** — All / Favorites / User / Stock / Light / Dark / Hidden, plus search.
-- **Move to folder** from the preview (or create a folder from that menu).
+- **Move to folder** is the first preview action (then Favorite, then Edit in Aether). Hide and Show are separate buttons: Hide when the theme is visible, Show when it is hidden.
 - **Backgrounds** — click a wallpaper in the preview to apply **that theme and that wallpaper**. Star one as the **default**: it loads when you apply the theme (including from schedules) and is used for catalog and picker previews.
-- **Hide** themes without uninstalling; **Hidden** filter lists them. **Unhide** / **Unfavorite** when already set.
+- **Hide** themes without uninstalling; **Hidden** filter lists them. **Show** replaces Hide when the theme is already hidden. **Unfavorite** when it is already a favorite.
 - **Remove** user themes (never stock, never the active theme) with a confirmation dialog.
 - **Update git themes** via `omarchy theme update` (shown when the selected theme is git-backed).
 - **Edit in Aether** (optional) opens the Aether GUI with the theme wallpaper loaded for editing. It does not apply the theme through Aether.

@@ -21,6 +21,12 @@ Item {
   property string promptText: ""
   property bool folderMenuOpen: false
   property string folderActionId: ""
+  property string addFolderId: ""
+  property string addFolderName: ""
+  property string addQuery: ""
+  property var addDraft: []
+  property string assignSlug: ""
+  property var assignDraft: []
   property var scheduleExpandIds: []
   property bool confirmRemove: false
   property string confirmFolderId: ""
@@ -61,10 +67,42 @@ Item {
     if (!svc || !selectedSlug) return null
     return Model.themeBySlug(svc.themes, selectedSlug)
   }
-  readonly property var folderChoices: {
-    var out = [{ id: "", name: "Ungrouped" }]
+  readonly property var addThemeChoices: {
+    var draft = root.addDraft || []
+    var inDraft = {}
+    for (var d = 0; d < draft.length; d++) inDraft[draft[d]] = true
+    var q = root.addQuery
+    var listed = []
+    var rest = []
+    var themes = root.themes || []
+    for (var i = 0; i < themes.length; i++) {
+      var t = themes[i]
+      if (!t || !t.slug) continue
+      if (!Model.fuzzyMatch(q, t.name, t.slug)) continue
+      var row = {
+        slug: t.slug,
+        name: t.name || t.slug,
+        source: t.source === "user" ? "User" : "Stock",
+        checked: !!inDraft[t.slug]
+      }
+      if (row.checked) listed.push(row)
+      else rest.push(row)
+    }
+    return listed.concat(rest)
+  }
+  readonly property var assignFolderChoices: {
+    var draft = root.assignDraft || []
+    var want = {}
+    for (var d = 0; d < draft.length; d++) want[draft[d]] = true
     var folders = root.config.folders || []
-    for (var i = 0; i < folders.length; i++) out.push(folders[i])
+    var out = []
+    for (var i = 0; i < folders.length; i++) {
+      out.push({
+        id: folders[i].id,
+        name: folders[i].name || folders[i].id,
+        checked: !!want[folders[i].id]
+      })
+    }
     return out
   }
   readonly property color fg: Color.foreground
@@ -133,16 +171,94 @@ Item {
 
   function applySelected() {
     if (root.folderMenuOpen || root.promptKind || root.confirmRemove) return
+    if (root.addFolderId.length || root.assignSlug.length) return
     if (svc && svc.pendingManualSlug) return
     if (selected && svc) svc.requestManualApply(selected.slug)
   }
 
+  function openAddModal(folderId) {
+    if (!folderId || Model.isReservedSection(folderId)) return
+    var folders = root.config.folders || []
+    var name = "Folder"
+    var slugs = []
+    for (var i = 0; i < folders.length; i++) {
+      if (folders[i].id === folderId) {
+        name = folders[i].name || folderId
+        slugs = (folders[i].themes || []).slice()
+        break
+      }
+    }
+    root.addFolderId = folderId
+    root.addFolderName = name
+    root.addDraft = slugs
+    root.addQuery = ""
+  }
+
+  function closeAddModal() {
+    root.addFolderId = ""
+    root.addFolderName = ""
+    root.addQuery = ""
+    root.addDraft = []
+    keyCatcher.forceActiveFocus()
+  }
+
+  function toggleAddDraft(slug) {
+    if (!slug) return
+    var next = (root.addDraft || []).slice()
+    var i = next.indexOf(slug)
+    if (i >= 0) next.splice(i, 1)
+    else next.push(slug)
+    root.addDraft = next
+  }
+
+  function saveAddModal() {
+    if (svc && root.addFolderId) svc.setFolderThemes(root.addFolderId, root.addDraft)
+    root.closeAddModal()
+  }
+
+  function openAssignModal(slug) {
+    if (!slug) return
+    root.folderMenuOpen = false
+    root.assignSlug = slug
+    root.assignDraft = Model.foldersForSlug(root.config, slug)
+  }
+
+  function closeAssignModal() {
+    root.assignSlug = ""
+    root.assignDraft = []
+    keyCatcher.forceActiveFocus()
+  }
+
+  function toggleAssignDraft(folderId) {
+    if (!folderId) return
+    var next = (root.assignDraft || []).slice()
+    var i = next.indexOf(folderId)
+    if (i >= 0) next.splice(i, 1)
+    else next.push(folderId)
+    root.assignDraft = next
+  }
+
+  function saveAssignModal() {
+    if (svc && root.assignSlug) svc.setThemeFolders(root.assignSlug, root.assignDraft)
+    root.closeAssignModal()
+  }
+
   function submitPrompt() {
     if (!svc || !root.promptKind) return
-    if (root.promptKind === "folder") svc.createFolder(root.promptText || "Folder")
+    var created = ""
+    if (root.promptKind === "folder") created = svc.createFolder(root.promptText || "Folder")
     if (root.promptKind === "rename") svc.renameFolder(root.promptFolderId, root.promptText)
     root.promptKind = ""
-    keyCatcher.forceActiveFocus()
+    if (created && root.assignSlug) {
+      var draft = (root.assignDraft || []).slice()
+      draft.push(created)
+      root.assignDraft = draft
+      keyCatcher.forceActiveFocus()
+    } else if (created) {
+      root.openAddModal(created)
+    } else {
+      keyCatcher.forceActiveFocus()
+    }
   }
 
   function cancelPrompt() {
@@ -570,6 +686,16 @@ Item {
             root.submitPrompt()
             event.accepted = true
           }
+          return
+        }
+        if (root.addFolderId.length) {
+          if (event.key === Qt.Key_Escape) { root.closeAddModal(); event.accepted = true }
+          else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { root.saveAddModal(); event.accepted = true }
+          return
+        }
+        if (root.assignSlug.length) {
+          if (event.key === Qt.Key_Escape) { root.closeAssignModal(); event.accepted = true }
+          else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { root.saveAssignModal(); event.accepted = true }
           return
         }
         if (root.folderActionId.length) {
@@ -1032,6 +1158,31 @@ Item {
                     }
                   }
                   Rectangle {
+                    visible: !Model.isReservedSection(modelData.id)
+                    Layout.preferredHeight: Style.space(22)
+                    Layout.preferredWidth: addThemesLab.implicitWidth + Style.space(14)
+                    Layout.alignment: Qt.AlignVCenter
+                    radius: Style.cornerRadius
+                    color: Util.alpha(root.fg, 0.08)
+                    border.width: 1
+                    border.color: Util.alpha(root.fg, 0.14)
+                    Text {
+                      textFormat: Text.PlainText
+                      id: addThemesLab
+                      anchors.centerIn: parent
+                      text: "Add themes"
+                      color: root.fg
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      font.bold: true
+                    }
+                    MouseArea {
+                      anchors.fill: parent
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: root.openAddModal(modelData.id)
+                    }
+                  }
+                  Rectangle {
                     id: folderActBtn
                     visible: !Model.isReservedSection(modelData.id)
                     Layout.preferredWidth: Style.space(26)
@@ -1223,7 +1374,7 @@ Item {
 
                   Column {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width - Style.space(118)
+                    width: parent.width - (Model.isReservedSection(modelData.section) ? Style.space(118) : Style.space(148))
                     spacing: 2
                     Text {
                       textFormat: Text.PlainText
@@ -1252,30 +1403,58 @@ Item {
                   onDoubleClicked: if (svc) svc.requestManualApply(modelData.slug)
                 }
 
-                Rectangle {
-                  id: starHit
+                Row {
+                  id: themeRowActs
                   anchors.right: parent.right
                   anchors.verticalCenter: parent.verticalCenter
                   anchors.rightMargin: Style.space(6)
-                  width: Style.space(28)
-                  height: Style.space(28)
-                  radius: Style.cornerRadius
+                  spacing: Style.space(2)
                   z: 3
-                  color: starMouse.containsMouse ? Util.alpha(root.accent, 0.28) : "transparent"
-                  Text {
-                    textFormat: Text.PlainText
-                    anchors.centerIn: parent
-                    text: root.config.favorites.indexOf(modelData.slug) >= 0 ? "★" : "☆"
-                    color: root.config.favorites.indexOf(modelData.slug) >= 0 ? root.accent : root.muted
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.body
+                  Rectangle {
+                    id: removeFromFolderHit
+                    visible: !Model.isReservedSection(modelData.section)
+                    width: Style.space(28)
+                    height: Style.space(28)
+                    radius: Style.cornerRadius
+                    color: removeFromFolderMouse.containsMouse ? Util.alpha(root.accent, 0.28) : "transparent"
+                    Accessible.name: "Remove from folder"
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.centerIn: parent
+                      text: "✕"
+                      color: root.muted
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.bodySmall
+                    }
+                    MouseArea {
+                      id: removeFromFolderMouse
+                      anchors.fill: parent
+                      hoverEnabled: true
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: if (svc) svc.removeFromFolder(modelData.slug, modelData.section)
+                    }
                   }
-                  MouseArea {
-                    id: starMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: if (svc) svc.toggleFavorite(modelData.slug)
+                  Rectangle {
+                    id: starHit
+                    width: Style.space(28)
+                    height: Style.space(28)
+                    radius: Style.cornerRadius
+                    color: starMouse.containsMouse ? Util.alpha(root.accent, 0.28) : "transparent"
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.centerIn: parent
+                      text: root.config.favorites.indexOf(modelData.slug) >= 0 ? "★" : "☆"
+                      color: root.config.favorites.indexOf(modelData.slug) >= 0 ? root.accent : root.muted
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                    }
+                    MouseArea {
+                      id: starMouse
+                      anchors.fill: parent
+                      hoverEnabled: true
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: if (svc) svc.toggleFavorite(modelData.slug)
+                    }
                   }
                 }
               }
@@ -1451,10 +1630,11 @@ Item {
 
                 Repeater {
                   model: [
-                    { id: "fav", label: "Favorite" },
-                    { id: "hide", label: "Hide" },
                     { id: "folder", label: "Move to folder" },
+                    { id: "fav", label: "Favorite" },
                     { id: "aether", label: "Edit in Aether" },
+                    { id: "hide", label: "Hide" },
+                    { id: "show", label: "Show" },
                     { id: "random", label: "Random favorite" },
                     { id: "update", label: "Update git themes" },
                     { id: "remove", label: "Remove" },
@@ -1463,11 +1643,14 @@ Item {
                   delegate: Rectangle {
                     required property var modelData
                     visible: {
-                      if (modelData.id === "aether") return !!(svc && svc.aetherAvailable && root.selected)
+                      if (!root.selected && modelData.id !== "random") return false
+                      if (modelData.id === "aether") return !!(svc && svc.aetherAvailable)
+                      if (modelData.id === "hide") return root.config.hidden.indexOf(root.selectedSlug) < 0
+                      if (modelData.id === "show") return root.config.hidden.indexOf(root.selectedSlug) >= 0
                       if (modelData.id === "update") return !!(root.selected && root.selected.git)
                       if (modelData.id === "remove") return !!(root.selected && root.selected.source === "user" && root.selected.slug !== (svc ? svc.currentSlug : ""))
-                      if (modelData.id === "random") return true
-                      return !!root.selected || modelData.id === "folder"
+                      if (modelData.id === "random") return !!(root.config.favorites && root.config.favorites.length)
+                      return true
                     }
                     width: btnLabel.implicitWidth + Style.space(16)
                     height: Style.space(30)
@@ -1480,8 +1663,6 @@ Item {
                       text: {
                         if (modelData.id === "fav" && root.config.favorites.indexOf(root.selectedSlug) >= 0)
                           return "Unfavorite"
-                        if (modelData.id === "hide" && root.config.hidden.indexOf(root.selectedSlug) >= 0)
-                          return "Unhide"
                         return modelData.label
                       }
                       color: root.fg
@@ -1493,62 +1674,16 @@ Item {
                       cursorShape: Qt.PointingHandCursor
                       onClicked: {
                         if (!svc) return
-                        if (modelData.id === "fav" && selectedSlug) svc.toggleFavorite(selectedSlug)
-                        else if (modelData.id === "hide" && selectedSlug) svc.toggleHidden(selectedSlug)
-                        else if (modelData.id === "folder") root.folderMenuOpen = !root.folderMenuOpen
+                        if (modelData.id === "folder" && selectedSlug) root.openAssignModal(selectedSlug)
+                        else if (modelData.id === "fav" && selectedSlug) svc.toggleFavorite(selectedSlug)
                         else if (modelData.id === "aether" && root.selected) svc.openAether(root.selected)
+                        else if (modelData.id === "hide" && selectedSlug) svc.toggleHidden(selectedSlug)
+                        else if (modelData.id === "show" && selectedSlug) svc.toggleHidden(selectedSlug)
                         else if (modelData.id === "random") svc.randomFavorite()
                         else if (modelData.id === "update") svc.updateGitThemes()
                         else if (modelData.id === "remove") root.confirmRemove = true
                         else if (modelData.id === "apply") root.applySelected()
                       }
-                    }
-                  }
-                }
-              }
-
-              Column {
-                visible: root.folderMenuOpen
-                spacing: Style.space(4)
-                Text {
-                  textFormat: Text.PlainText
-                  text: "Move to"
-                  color: root.muted
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                }
-                Repeater {
-                  model: root.folderChoices
-                  delegate: Text {
-                    required property var modelData
-                    textFormat: Text.PlainText
-                    text: "→ " + modelData.name
-                    color: root.fg
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.bodySmall
-                    MouseArea {
-                      anchors.fill: parent
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: {
-                        if (svc && selectedSlug) svc.moveToFolder(selectedSlug, modelData.id)
-                        root.folderMenuOpen = false
-                      }
-                    }
-                  }
-                }
-                Text {
-                  textFormat: Text.PlainText
-                  text: "+ New folder"
-                  color: root.accent
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                      root.folderMenuOpen = false
-                      root.promptKind = "folder"
-                      root.promptText = ""
                     }
                   }
                 }
@@ -2453,8 +2588,278 @@ Item {
       }
 
       Rectangle {
+        visible: root.addFolderId.length > 0
+        anchors.fill: parent
+        z: 36
+        color: Util.alpha(root.bg, 0.72)
+        onVisibleChanged: if (visible) Qt.callLater(function() { addSearchField.forceActiveFocus() })
+        MouseArea { anchors.fill: parent; onClicked: root.closeAddModal() }
+        Rectangle {
+          width: 480
+          height: 520
+          radius: Style.cornerRadius
+          color: root.bg
+          border.color: root.accent
+          border.width: 1
+          anchors.centerIn: parent
+          MouseArea { anchors.fill: parent; onClicked: { } }
+          ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: Style.space(16)
+            spacing: Style.space(10)
+            Text {
+              textFormat: Text.PlainText
+              text: "Add themes"
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.subtitle
+              font.bold: true
+            }
+            Text {
+              textFormat: Text.PlainText
+              Layout.fillWidth: true
+              wrapMode: Text.WordWrap
+              text: "Check to add. Uncheck to remove. Themes in “" + root.addFolderName + "”."
+              color: root.muted
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            TextField {
+              id: addSearchField
+              Layout.fillWidth: true
+              placeholderText: "Filter themes"
+              text: root.addQuery
+              onTextChanged: root.addQuery = text
+              Keys.onEscapePressed: root.closeAddModal()
+            }
+            ListView {
+              Layout.fillWidth: true
+              Layout.fillHeight: true
+              clip: true
+              model: root.addThemeChoices
+              spacing: Style.space(2)
+              delegate: Rectangle {
+                required property var modelData
+                width: ListView.view.width
+                height: Style.space(36)
+                radius: Style.cornerRadius
+                color: addThemeHover.containsMouse ? Util.alpha(root.accent, 0.12) : "transparent"
+                RowLayout {
+                  anchors.fill: parent
+                  anchors.leftMargin: Style.space(8)
+                  anchors.rightMargin: Style.space(8)
+                  spacing: Style.space(8)
+                  Rectangle {
+                    Layout.preferredWidth: Style.space(16)
+                    Layout.preferredHeight: Style.space(16)
+                    radius: Style.cornerRadius
+                    color: modelData.checked ? root.accent : root.bg
+                    border.width: 1
+                    border.color: root.fg
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.centerIn: parent
+                      visible: modelData.checked
+                      text: "✓"
+                      color: root.bg
+                      font.pixelSize: 10
+                      font.bold: true
+                    }
+                  }
+                  Text {
+                    textFormat: Text.PlainText
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    text: modelData.name
+                    color: root.fg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                  }
+                  Text {
+                    textFormat: Text.PlainText
+                    text: modelData.source
+                    color: root.muted
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                }
+                MouseArea {
+                  id: addThemeHover
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.toggleAddDraft(modelData.slug)
+                }
+              }
+            }
+            Row {
+              spacing: Style.space(8)
+              Rectangle {
+                width: 80
+                height: Style.space(30)
+                radius: Style.cornerRadius
+                color: Util.alpha(root.fg, 0.08)
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Cancel"; color: root.fg; font.family: root.fontFamily }
+                MouseArea { anchors.fill: parent; onClicked: root.closeAddModal() }
+              }
+              Rectangle {
+                width: addSaveLab.implicitWidth + Style.space(20)
+                height: Style.space(30)
+                radius: Style.cornerRadius
+                color: Util.alpha(root.accent, 0.28)
+                Text {
+                  textFormat: Text.PlainText
+                  id: addSaveLab
+                  anchors.centerIn: parent
+                  text: "Save folder"
+                  color: root.fg
+                  font.family: root.fontFamily
+                }
+                MouseArea { anchors.fill: parent; onClicked: root.saveAddModal() }
+              }
+            }
+          }
+        }
+      }
+
+      Rectangle {
+        visible: root.assignSlug.length > 0
+        anchors.fill: parent
+        z: 36
+        color: Util.alpha(root.bg, 0.72)
+        MouseArea { anchors.fill: parent; onClicked: root.closeAssignModal() }
+        Rectangle {
+          width: 420
+          height: 460
+          radius: Style.cornerRadius
+          color: root.bg
+          border.color: root.accent
+          border.width: 1
+          anchors.centerIn: parent
+          MouseArea { anchors.fill: parent; onClicked: { } }
+          ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: Style.space(16)
+            spacing: Style.space(10)
+            Text {
+              textFormat: Text.PlainText
+              text: "Move to folder"
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.subtitle
+              font.bold: true
+            }
+            Text {
+              textFormat: Text.PlainText
+              Layout.fillWidth: true
+              wrapMode: Text.WordWrap
+              text: "Check folders to add this theme. Uncheck to remove. A theme can be in more than one folder."
+              color: root.muted
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            ListView {
+              Layout.fillWidth: true
+              Layout.fillHeight: true
+              clip: true
+              model: root.assignFolderChoices
+              spacing: Style.space(2)
+              delegate: Rectangle {
+                required property var modelData
+                width: ListView.view.width
+                height: Style.space(36)
+                radius: Style.cornerRadius
+                color: assignHover.containsMouse ? Util.alpha(root.accent, 0.12) : "transparent"
+                RowLayout {
+                  anchors.fill: parent
+                  anchors.leftMargin: Style.space(8)
+                  anchors.rightMargin: Style.space(8)
+                  spacing: Style.space(8)
+                  Rectangle {
+                    Layout.preferredWidth: Style.space(16)
+                    Layout.preferredHeight: Style.space(16)
+                    radius: Style.cornerRadius
+                    color: modelData.checked ? root.accent : root.bg
+                    border.width: 1
+                    border.color: root.fg
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.centerIn: parent
+                      visible: modelData.checked
+                      text: "✓"
+                      color: root.bg
+                      font.pixelSize: 10
+                      font.bold: true
+                    }
+                  }
+                  Text {
+                    textFormat: Text.PlainText
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    text: modelData.name
+                    color: root.fg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                  }
+                }
+                MouseArea {
+                  id: assignHover
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.toggleAssignDraft(modelData.id)
+                }
+              }
+            }
+            Text {
+              textFormat: Text.PlainText
+              text: "+ New folder"
+              color: root.accent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  root.promptKind = "folder"
+                  root.promptText = ""
+                }
+              }
+            }
+            Row {
+              spacing: Style.space(8)
+              Rectangle {
+                width: 80
+                height: Style.space(30)
+                radius: Style.cornerRadius
+                color: Util.alpha(root.fg, 0.08)
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Cancel"; color: root.fg; font.family: root.fontFamily }
+                MouseArea { anchors.fill: parent; onClicked: root.closeAssignModal() }
+              }
+              Rectangle {
+                width: assignSaveLab.implicitWidth + Style.space(20)
+                height: Style.space(30)
+                radius: Style.cornerRadius
+                color: Util.alpha(root.accent, 0.28)
+                Text {
+                  textFormat: Text.PlainText
+                  id: assignSaveLab
+                  anchors.centerIn: parent
+                  text: "Save folders"
+                  color: root.fg
+                  font.family: root.fontFamily
+                }
+                MouseArea { anchors.fill: parent; onClicked: root.saveAssignModal() }
+              }
+            }
+          }
+        }
+      }
+
+      Rectangle {
         visible: root.promptKind.length > 0
         anchors.fill: parent
+        z: 40
         color: Util.alpha(root.bg, 0.72)
         onVisibleChanged: if (visible) Qt.callLater(function() { promptField.forceActiveFocus() })
         MouseArea { anchors.fill: parent; onClicked: root.cancelPrompt() }

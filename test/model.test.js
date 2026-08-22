@@ -3,7 +3,7 @@ const fs = require("fs")
 const path = require("path")
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
   .replace(/^\.pragma library\s*/, "")
-eval(src + "\nmodule.exports = { defaultConfig, normalizeConfig, flatten, clockPeriod, bumpHHMM, pruneConfig, toggleInList, moveInList, isValidSlug, isReservedSection, currentPeriod, sanitizeFolderName, isCollapsed, activeRule, themeSlugForBackground, moveFolderIds, parseTimeInput, formatTimeDisplay, formatHourMinute, hourIsPm, applyMeridiem, parseClockTime, pickerSections, fuzzyMatch, minutesOf, moveIdBefore, wallpaperCyclePaths, nextWallpaper, cycleFolderChoices, isReorderableSection, themeWallpaperPaths, cycleIntervalMs, cycleSlugs, syncThemeCycleState, activeWallpaperSpec, isScheduleActive, scheduleActiveLabel, defaultWallpaper, applyDefaultPreviews, boundCatalog }")
+eval(src + "\nmodule.exports = { defaultConfig, normalizeConfig, flatten, clockPeriod, bumpHHMM, pruneConfig, toggleInList, moveInList, isValidSlug, isReservedSection, currentPeriod, sanitizeFolderName, isCollapsed, activeRule, themeSlugForBackground, moveFolderIds, parseTimeInput, formatTimeDisplay, formatHourMinute, hourIsPm, applyMeridiem, parseClockTime, pickerSections, fuzzyMatch, minutesOf, moveIdBefore, wallpaperCyclePaths, nextWallpaper, cycleFolderChoices, isReorderableSection, themeWallpaperPaths, cycleIntervalMs, cycleSlugs, syncThemeCycleState, activeWallpaperSpec, isScheduleActive, scheduleActiveLabel, defaultWallpaper, applyDefaultPreviews, boundCatalog, foldersForSlug, addSlugToFolder, dropSlugFromFolder, replaceFolderThemes, setThemeFolders }")
 
 const m = module.exports
 const cfg = m.normalizeConfig({
@@ -150,6 +150,29 @@ if (!expRows.some(r => r.rowType === "theme" && r.section === "recents" && r.slu
 const hiddenCfg = m.normalizeConfig({ hidden: ["nord"], folders: [{ id: "dark", name: "Dark", themes: ["nord"] }] })
 const hiddenRows = m.flatten(themes, hiddenCfg, "hidden", "")
 if (!hiddenRows.some(r => r.rowType === "theme" && r.slug === "nord")) throw new Error("hidden-in-folder must appear")
+const both = m.flatten(themes, pruned, "all", "")
+if (!both.some(r => r.rowType === "theme" && r.section === "stock" && r.slug === "nord")) throw new Error("folder member still in stock")
+if (!both.some(r => r.rowType === "theme" && r.section === "dark" && r.slug === "nord")) throw new Error("folder member in folder")
+const known = { nord: true, white: true, "sakura-mochi": true }
+const withWhite = m.addSlugToFolder(pruned, "dark", "white")
+if (withWhite.folders[0].themes.indexOf("white") < 0 || withWhite.folders[0].themes.indexOf("nord") < 0)
+  throw new Error("add keeps existing and appends")
+if (m.foldersForSlug(withWhite, "white").join() !== "dark") throw new Error("foldersForSlug")
+const dropped = m.dropSlugFromFolder(withWhite, "dark", "nord")
+if (dropped.folders[0].themes.indexOf("nord") >= 0 || dropped.folders[0].themes.indexOf("white") < 0)
+  throw new Error("drop one keeps others")
+const replaced = m.replaceFolderThemes(pruned, "dark", ["white", "nord", "nord", "../x"], known)
+if (replaced.folders[0].themes.join() !== "white,nord") throw new Error("replace folder themes " + replaced.folders[0].themes.join())
+const twoFolders = m.normalizeConfig({
+  folders: [
+    { id: "dark", name: "Dark", themes: ["nord"] },
+    { id: "light", name: "Light", themes: [] }
+  ]
+})
+const inTwo = m.setThemeFolders(twoFolders, "nord", ["dark", "light"])
+if (m.foldersForSlug(inTwo, "nord").join() !== "dark,light") throw new Error("theme in two folders")
+const unchecked = m.setThemeFolders(inTwo, "nord", ["light"])
+if (m.foldersForSlug(unchecked, "nord").join() !== "light") throw new Error("uncheck removes folder")
 
 if (m.currentPeriod({ schedule: { mode: "off" } }, "day", 8 * 60) !== "") throw new Error("off period")
 const clockCfg = { schedule: { mode: "clock", dayAt: "07:00", nightAt: "19:00", day: "white", night: "nord" } }

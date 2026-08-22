@@ -795,14 +795,80 @@ function pruneConfig(config, themes) {
   return cfg
 }
 
+function foldersForSlug(config, slug) {
+  var cfg = normalizeConfig(config)
+  var out = []
+  for (var i = 0; i < cfg.folders.length; i++) {
+    if (cfg.folders[i].themes.indexOf(slug) >= 0) out.push(cfg.folders[i].id)
+  }
+  return out
+}
+
 function folderOfSlug(config, slug) {
-  for (var i = 0; i < config.folders.length; i++) {
-    var themes = config.folders[i].themes
-    for (var j = 0; j < themes.length; j++) {
-      if (themes[j] === slug) return config.folders[i].id
+  var ids = foldersForSlug(config, slug)
+  return ids.length ? ids[0] : ""
+}
+
+function addSlugToFolder(config, folderId, slug) {
+  var cfg = normalizeConfig(config)
+  if (isReservedSection(folderId) || !isValidSlug(slug)) return cfg
+  for (var i = 0; i < cfg.folders.length; i++) {
+    if (cfg.folders[i].id === folderId) {
+      if (cfg.folders[i].themes.indexOf(slug) < 0) cfg.folders[i].themes.push(slug)
+      break
     }
   }
-  return ""
+  return cfg
+}
+
+function dropSlugFromFolder(config, folderId, slug) {
+  var cfg = normalizeConfig(config)
+  if (isReservedSection(folderId)) return cfg
+  for (var i = 0; i < cfg.folders.length; i++) {
+    if (cfg.folders[i].id === folderId) {
+      cfg.folders[i].themes = cfg.folders[i].themes.filter(function(s) { return s !== slug })
+      break
+    }
+  }
+  return cfg
+}
+
+function setThemeFolders(config, slug, folderIds) {
+  var cfg = normalizeConfig(config)
+  if (!isValidSlug(slug)) return cfg
+  var want = {}
+  var ids = folderIds || []
+  for (var i = 0; i < ids.length; i++) {
+    if (ids[i] && !isReservedSection(ids[i])) want[ids[i]] = true
+  }
+  for (var j = 0; j < cfg.folders.length; j++) {
+    var kept = cfg.folders[j].themes.filter(function(s) { return s !== slug })
+    if (want[cfg.folders[j].id]) kept.push(slug)
+    cfg.folders[j].themes = kept
+  }
+  return cfg
+}
+
+function replaceFolderThemes(config, folderId, slugs, known) {
+  var cfg = normalizeConfig(config)
+  if (isReservedSection(folderId)) return cfg
+  var clean = []
+  var seen = {}
+  var list = slugs || []
+  for (var i = 0; i < list.length; i++) {
+    var s = list[i]
+    if (!isValidSlug(s) || seen[s]) continue
+    if (known && !known[s]) continue
+    seen[s] = true
+    clean.push(s)
+  }
+  for (var j = 0; j < cfg.folders.length; j++) {
+    if (cfg.folders[j].id === folderId) {
+      cfg.folders[j].themes = clean
+      break
+    }
+  }
+  return cfg
 }
 
 function themeBySlug(themes, slug) {
@@ -869,17 +935,10 @@ function flatten(themes, config, filter, query) {
     return rows
   }
 
-  var assigned = {}
-  for (var a = 0; a < cfg.folders.length; a++) {
-    for (var b = 0; b < cfg.folders[a].themes.length; b++)
-      assigned[cfg.folders[a].themes[b]] = true
-  }
-
   function hitsFor(id) {
     var slugs = slugsInSection(cfg, themes, id)
     var hits = []
     for (var i = 0; i < slugs.length; i++) {
-      if ((id === "user" || id === "stock") && assigned[slugs[i]]) continue
       var t = themeBySlug(themes, slugs[i])
       if (t && matchesFilter(t, cfg, filter, query)) hits.push(slugs[i])
     }
