@@ -5,6 +5,7 @@ set -euo pipefail
 
 CONFIG_DIR=$HOME/.config/omarchy
 CONFIG=$CONFIG_DIR/themebook.json
+MAX_CONFIG_BYTES=262144
 
 mkdir -p "$CONFIG_DIR"
 
@@ -12,20 +13,27 @@ case ${1:-} in
   path)
     printf '%s\n' "$CONFIG"
     ;;
+  stamp)
+    stat -c '%s:%Y' "$CONFIG" 2>/dev/null || printf 'missing\n'
+    ;;
   read)
-    if [[ -f $CONFIG ]]; then
-      cat "$CONFIG"
-    else
+    if [[ ! -f $CONFIG ]]; then
       printf '%s\n' '{}'
+      exit 0
     fi
+    size=$(stat -c%s "$CONFIG" 2>/dev/null || echo 0)
+    if (( size > MAX_CONFIG_BYTES )); then
+      printf '%s\n' '{}'
+      exit 0
+    fi
+    head -c "$MAX_CONFIG_BYTES" "$CONFIG"
     ;;
   write)
     json=${2-}
     if [[ -z $json ]]; then
       json=$(cat)
     fi
-    # Cap the file so a huge argv/stdin cannot fill the home partition.
-    if (( ${#json} > 200000 )); then
+    if (( ${#json} > MAX_CONFIG_BYTES )); then
       echo "config write: JSON too large" >&2
       exit 1
     fi
@@ -36,7 +44,7 @@ case ${1:-} in
     mv "$tmp" "$CONFIG"
     ;;
   *)
-    echo "Usage: config read|write|path [json]" >&2
+    echo "Usage: config read|write|path|stamp [json]" >&2
     exit 1
     ;;
 esac

@@ -14,3 +14,12 @@ got=$("$root/scripts/config" read)
 echo "$got" | jq -e '.favorites == ["tokyo-night"]' >/dev/null
 echo "$got" | jq -e '.folders[0].id == "dark"' >/dev/null
 echo "config ok"
+
+python3 - <<'PY'
+from pathlib import Path
+p = Path.home() / ".config/omarchy/themebook.json"
+p.write_bytes(b"x" * (262144 + 10))
+PY
+got=$("$root/scripts/config" read)
+echo "$got" | jq -e '. == {}' >/dev/null
+echo "config oversized ok"

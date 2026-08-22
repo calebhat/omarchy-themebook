@@ -134,7 +134,7 @@ Optional tools (already common on Omarchy, not installed by this plugin):
 ## Security notes
 
 - Applies themes with `omarchy theme set <slug>` as argv, never `bash -c`.
-- Preview and background paths must resolve under the real theme directory (symlink themes included). Directory symlinks under `backgrounds/` are not followed out of the tree. Catalog JSON is capped (256 themes, 48 backgrounds each, 1 MiB); `themebook.json` is capped at 256 KiB. Folder and theme names render as plain text.
+- Preview and background paths must resolve under the real theme directory (symlink themes included). Directory symlinks under `backgrounds/` are not followed out of the tree. Catalog JSON is capped (256 themes, 48 backgrounds each, 1 MiB). `find` is time-bounded and item-capped **before** sort. `themebook.json` is size-checked with `stat` before any bytes are copied into the shell (max 256 KiB). Folder and theme names render as plain text.
 - **Theme menu** edits `omarchy-menu.jsonc` only while that checkbox is on; turning it off deletes the override.
 - The Apps `.desktop` file is created only if it does not already exist.
 - No network, no sudo, no pkexec, no pip, no setup script.

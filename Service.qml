@@ -32,6 +32,7 @@ Item {
   property bool installing: false
   property bool thumbsWarming: false
   property string lastThumbKey: ""
+  property string configStamp: ""
 
   readonly property string pluginDir: {
     var u = String(Qt.resolvedUrl("./manifest.json"))
@@ -60,6 +61,10 @@ Item {
     toolsProc.running = true
     schedulerCheck.running = true
     sunProc.running = true
+  }
+
+  function reloadConfig() {
+    configReader.running = true
   }
 
   function knownTheme(slug) {
@@ -863,24 +868,37 @@ Item {
     }
   }
 
-  FileView {
-    id: configFile
-    path: root.configPath
-    watchChanges: true
-    printErrors: false
-    onLoaded: {
-      try {
-        var raw = String(text() || "")
-        if (raw.length > Model.maxConfigChars()) throw "config too large"
-        root.config = Model.normalizeConfig(JSON.parse(raw || "{}"))
-      } catch (e) {
-        root.config = Model.defaultConfig()
+  Process {
+    id: configReader
+    command: [root.scriptPath("config"), "read"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var raw = String(text || "")
+          if (raw.length > Model.maxConfigChars()) raw = "{}"
+          root.config = Model.normalizeConfig(JSON.parse(raw || "{}"))
+        } catch (e) {
+          root.config = Model.defaultConfig()
+        }
+        root.syncPickerMenu()
       }
-      root.syncPickerMenu()
     }
-    onLoadFailed: {
-      root.config = Model.defaultConfig()
-      root.syncPickerMenu()
+  }
+
+  Process {
+    id: configStampProc
+    command: [root.scriptPath("config"), "stamp"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var s = String(text || "").trim()
+        if (!s) return
+        if (s !== root.configStamp) {
+          root.configStamp = s
+          root.reloadConfig()
+        }
+      }
     }
   }
 
@@ -913,6 +931,7 @@ Item {
     onTriggered: {
       var mode = (root.config.schedule && root.config.schedule.mode) || ""
       scan += 1
+      if (scan % 2 === 0) configStampProc.running = true
       if ((mode === "themes" || mode === "wallpapers") && scan % 4 === 0)
         root.reloadCatalog()
       root.tickThemeCycle()
@@ -1039,7 +1058,8 @@ Item {
   }
 
   Component.onCompleted: {
-    configFile.reload()
+    root.reloadConfig()
+    configStampProc.running = true
     root.reloadTools()
     root.reloadCatalog()
     root.installLaunchers()
