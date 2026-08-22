@@ -103,6 +103,14 @@ Item {
 
   function applyTheme(slug, fromSchedule) {
     if (!Model.isValidSlug(slug) || !knownTheme(slug)) return
+    if (slug === root.currentSlug) {
+      if (root.pendingBg) {
+        var same = root.pendingBg
+        root.pendingBg = ""
+        applyBackground(same)
+      }
+      return
+    }
     if (applyProc.running) {
       root.pendingApply = slug
       return
@@ -144,6 +152,24 @@ Item {
     if (!ok) return
     bgProc.command = ["omarchy", "theme", "bg", "set", path]
     bgProc.running = true
+    root.patchCurrentBackground(path)
+  }
+
+  function patchCurrentBackground(path) {
+    var list = root.themes.slice()
+    var changed = false
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].slug !== root.currentSlug) continue
+      var t = {}
+      for (var k in list[i]) t[k] = list[i][k]
+      t.currentBackground = path
+      list[i] = t
+      changed = true
+    }
+    if (changed) {
+      root.themes = list
+      root.catalogRevision++
+    }
   }
 
   function applyNextBackground() {
@@ -803,7 +829,6 @@ Item {
     id: bgProc
     stdout: StdioCollector { waitForEnd: true }
     onExited: {
-      root.reloadCatalog()
       if (root.pendingBgNext) {
         root.pendingBgNext = false
         root.applyNextBackground()

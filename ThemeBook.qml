@@ -1305,7 +1305,16 @@ Item {
                 Image {
                   id: hero
                   anchors.fill: parent
-                  source: root.selected && root.selected.preview ? Util.fileUrl(root.selected.preview) : ""
+                  source: {
+                    var t = root.selected
+                    if (!t) return ""
+                    var path = ""
+                    if (svc && t.slug === svc.currentSlug && t.currentBackground)
+                      path = t.currentBackground
+                    else
+                      path = t.preview || t.currentBackground || ""
+                    return path ? Util.fileUrl(path) : ""
+                  }
                   fillMode: Image.PreserveAspectCrop
                   asynchronous: true
                   cache: true
@@ -1314,7 +1323,12 @@ Item {
                 }
                 Text {
                   textFormat: Text.PlainText
-                  visible: !root.selected || !root.selected.preview || hero.status === Image.Error
+                  visible: {
+                    var t = root.selected
+                    if (!t) return true
+                    var path = (svc && t.slug === svc.currentSlug && t.currentBackground) ? t.currentBackground : (t.preview || t.currentBackground || "")
+                    return !path || hero.status === Image.Error
+                  }
                   anchors.centerIn: parent
                   text: !root.selected ? "Select a theme" : "No preview"
                   color: root.muted
