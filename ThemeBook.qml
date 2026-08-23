@@ -803,9 +803,13 @@ Item {
           }
 
           Rectangle {
+            id: schedBtnBox
             Layout.alignment: Qt.AlignVCenter
-            width: schedRow.implicitWidth + Style.space(16)
-            height: Style.space(26)
+            implicitWidth: schedRow.implicitWidth
+            implicitHeight: Style.space(26)
+            Layout.preferredWidth: implicitWidth
+            Layout.preferredHeight: implicitHeight
+            Layout.minimumWidth: implicitWidth
             radius: Style.cornerRadius
             color: Model.isScheduleActive(root.config)
               ? Util.alpha(root.accent, 0.32)
@@ -814,11 +818,13 @@ Item {
             border.color: root.accent
             Row {
               id: schedRow
-              anchors.centerIn: parent
+              height: parent.height
               spacing: Style.space(6)
+              Item { width: Style.space(8); height: 1 }
               Text {
                 textFormat: Text.PlainText
                 id: schedBtn
+                anchors.verticalCenter: parent.verticalCenter
                 text: root.mainView === "schedule" ? "Themes" : "Schedule"
                 color: root.fg
                 font.family: root.fontFamily
@@ -827,7 +833,8 @@ Item {
               Rectangle {
                 id: scheduleOnBadge
                 visible: Model.isScheduleActive(root.config)
-                width: onLab.implicitWidth + Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                width: visible ? onLab.implicitWidth + Style.space(10) : 0
                 height: Style.space(16)
                 radius: Style.cornerRadius
                 color: root.accent
@@ -842,6 +849,7 @@ Item {
                   font.bold: true
                 }
               }
+              Item { width: Style.space(8); height: 1 }
             }
             MouseArea {
               anchors.fill: parent
