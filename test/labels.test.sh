@@ -33,6 +33,7 @@ need=(
   'text: "Apply and stop schedule"'
   'text: "New folder"'
   'id: folderActPopup'
+  'folderActMenuOpensUp'
   '{ id: "rename", label: "Rename" }'
   '{ id: "delete", label: "Delete" }'
   'text: "Collapse all"'

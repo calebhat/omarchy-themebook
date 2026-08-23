@@ -622,6 +622,15 @@ Item {
     return s
   }
 
+  function folderActMenuOpensUp(btn, popH) {
+    if (!themeList || !btn) return false
+    var h = Number(popH) || 0
+    if (h <= 0) h = Style.space(28) * 2 + Style.space(2) + Style.space(12)
+    var gap = Style.space(4)
+    var p = btn.mapToItem(themeList, 0, btn.height)
+    return p.y + gap + h > themeList.height
+  }
+
   function revealSelected() {
     if (!themeList) return
     for (var i = 0; i < rows.length; i++) {
@@ -1252,6 +1261,7 @@ Item {
                   Rectangle {
                     id: folderActBtn
                     visible: !Model.isReservedSection(modelData.id)
+                    property bool menuAbove: false
                     Layout.preferredWidth: Style.space(26)
                     Layout.preferredHeight: Style.space(22)
                     Layout.alignment: Qt.AlignVCenter
@@ -1277,6 +1287,7 @@ Item {
                           folderActPopup.close()
                         } else {
                           root.folderActionId = modelData.id
+                          folderActBtn.menuAbove = root.folderActMenuOpensUp(folderActBtn, folderActPopup.implicitHeight)
                           folderActPopup.open()
                         }
                       }
@@ -1284,8 +1295,9 @@ Item {
                     Popup {
                       id: folderActPopup
                       x: parent.width - width
-                      y: parent.height + Style.space(4)
+                      y: folderActBtn.menuAbove ? -(height + Style.space(4)) : parent.height + Style.space(4)
                       padding: Style.space(6)
+                      onAboutToShow: folderActBtn.menuAbove = root.folderActMenuOpensUp(folderActBtn, implicitHeight || height)
                       modal: false
                       dim: false
                       closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
