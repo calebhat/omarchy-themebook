@@ -11,10 +11,10 @@ function defaultConfig() {
     picker: {
       asked: true,
       replaceDefault: true,
-      defaultFolder: "favorites",
+      defaultFolder: "all",
       includeFavorites: true,
-      includeUser: false,
-      includeStock: false,
+      includeUser: true,
+      includeStock: true,
       includeRecents: false,
       lastFolder: "",
       lastSlug: "",
@@ -493,15 +493,15 @@ function applyDefaultPreviews(themes, config) {
 
 function normalizePicker(raw) {
   var p = raw && typeof raw === "object" ? raw : {}
-  var def = String(p.defaultFolder || "favorites")
-  if (!def) def = "favorites"
+  var def = String(p.defaultFolder || "all")
+  if (!def) def = "all"
   return {
     asked: p.asked === true,
     replaceDefault: p.replaceDefault !== false,
     defaultFolder: def,
     includeFavorites: p.includeFavorites !== false,
-    includeUser: p.includeUser === true,
-    includeStock: p.includeStock === true,
+    includeUser: p.includeUser !== false,
+    includeStock: p.includeStock !== false,
     includeRecents: p.includeRecents === true,
     lastFolder: String(p.lastFolder || ""),
     lastSlug: String(p.lastSlug || ""),

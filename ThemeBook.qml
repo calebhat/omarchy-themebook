@@ -270,8 +270,8 @@ Item {
     var p = root.config.picker || {}
     if (id === "favorites") return p.includeFavorites !== false
     if (id === "recents") return p.includeRecents === true
-    if (id === "user") return p.includeUser === true
-    if (id === "stock") return p.includeStock === true
+    if (id === "user") return p.includeUser !== false
+    if (id === "stock") return p.includeStock !== false
     var folders = root.config.folders || []
     for (var i = 0; i < folders.length; i++)
       if (folders[i].id === id) return folders[i].inPicker === true

@@ -95,8 +95,9 @@ find_preview() {
       -print | sort)
   fi
   if [[ -f $theme_path/colors.toml ]]; then
-    make_swatch "$slug" "$theme_path/colors.toml"
+    make_swatch "$slug" "$theme_path/colors.toml" || true
   fi
+  return 0
 }
 
 list_backgrounds() {
@@ -125,8 +126,8 @@ lookup_thumb() {
   local image=$1
   local cache=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/image-selector
   local signature hash thumbnail
-  [[ -f $image ]] || return
-  signature=$(stat -Lc '%s:%Y' "$image" 2>/dev/null) || return
+  [[ -n $image && -f $image ]] || return 0
+  signature=$(stat -Lc '%s:%Y' "$image" 2>/dev/null) || return 0
   hash=$(printf '%s\t%s' "$image" "$signature" | md5sum | cut -d ' ' -f 1)
   thumbnail=$cache/$hash.jpg
   if [[ -f $thumbnail ]]; then
@@ -139,8 +140,11 @@ lookup_thumb() {
 get_color() {
   local file=$1
   local key=$2
-  [[ -f $file ]] || return
-  sed -nE "s/^[[:space:]]*$key[[:space:]]*=[[:space:]]*\"?([^\"[:space:]]+).*/\1/p" "$file" | head -n 1
+  # Missing colors.toml is normal for Aether/git themes. Never return 1:
+  # emit_theme runs under set -e, so a failed command substitution aborts
+  # the whole catalog and the panel gets an empty theme list.
+  [[ -n $file && -f $file ]] || return 0
+  sed -nE "s/^[[:space:]]*$key[[:space:]]*=[[:space:]]*\"?([^\"[:space:]]+).*/\1/p" "$file" 2>/dev/null | head -n 1 || true
 }
 
 make_swatch() {
@@ -159,17 +163,19 @@ make_swatch() {
     return
   fi
   if command -v magick >/dev/null 2>&1; then
-    magick -size 1536x864 "xc:$bg" -fill "$ac" -draw "rectangle 0,700 1536,864" "$out" 2>/dev/null || return
+    magick -size 1536x864 "xc:$bg" -fill "$ac" -draw "rectangle 0,700 1536,864" "$out" 2>/dev/null || return 0
     printf '%s\n' "$out"
   fi
+  return 0
 }
 
 emit_theme() {
   local slug=$1
   local theme_path=$2
   local source=$3
-  [[ $slug =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return
-  [[ $slug != *..* ]] || return
+  # Skip this theme only. A non-zero return would kill the rest of the catalog.
+  [[ $slug =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 0
+  [[ $slug != *..* ]] || return 0
   local colors_file preview is_current=false is_git=false
   local accent background foreground red orange yellow green cyan blue magenta mode
   local bg_json='[]'
@@ -205,8 +211,8 @@ emit_theme() {
   [[ $slug == "$CURRENT_THEME" ]] && is_current=true
   [[ -d $theme_path/.git ]] && is_git=true
 
-  json_room || return
-  (( theme_count < MAX_THEMES )) || return
+  json_room || return 0
+  (( theme_count < MAX_THEMES )) || return 0
   if command -v jq >/dev/null 2>&1; then
     bg_json=$(list_backgrounds "$theme_path" | jq -R -s -c --argjson max "$MAX_BACKGROUNDS" \
       'split("\n") | map(select(length > 0 and length <= 512)) | .[:$max]')
@@ -293,4 +299,4 @@ if ! json_room; then
   printf '[]\n'
   exit 0
 fi
-jq -s --argjson max "$MAX_THEMES" 'sort_by(.name) | .[:$max]' "$tmp"
+jq -s --argjson max "$MAX_THEMES" 'sort_by(.name) | .[:$max]' "$tmp" || printf '[]\n'

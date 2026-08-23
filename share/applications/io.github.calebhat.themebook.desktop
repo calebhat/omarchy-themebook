@@ -7,6 +7,9 @@ Exec=omarchy-shell shell toggle io.github.calebhat.themebook '{}'
 TryExec=omarchy-shell
 Icon=preferences-desktop-theme
 Terminal=false
+StartupNotify=false
 Categories=Settings;DesktopSettings;
 Keywords=theme;omarchy;wallpaper;aether;favorites;
 # No StartupWMClass: Quickshell surfaces all report org.quickshell.
+# StartupNotify=false: this Exec talks to the already-running shell. gtk-launch
+# and the Apps "Launching…" OSD otherwise wait ~15s for a new toplevel.

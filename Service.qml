@@ -363,7 +363,7 @@ Item {
 
   function setPickerDefault(id) {
     var next = Model.normalizeConfig(root.config)
-    next.picker.defaultFolder = String(id || "favorites")
+    next.picker.defaultFolder = String(id || "all")
     saveConfig(next)
   }
 
