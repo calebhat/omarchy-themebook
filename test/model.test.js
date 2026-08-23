@@ -120,6 +120,16 @@ const stoppedWp = m.clearSchedule({
 if (stoppedWp.schedule.mode !== "off") throw new Error("clear wallpapers mode")
 if (stoppedWp.wallpaperCycle.enabled) throw new Error("clear wallpaper cycle flag")
 if (m.isScheduleActive(stoppedWp)) throw new Error("cleared schedule still active")
+if (m.activeWallpaperSpec({ schedule: { mode: "wallpapers" } }, "day").on !== true)
+  throw new Error("wallpaper cycle spec on")
+if (m.activeWallpaperSpec(stoppedWp, "day").on) throw new Error("cleared wallpaper spec still on")
+const nestedWp = m.normalizeConfig({
+  schedule: { mode: "themes" },
+  themeCycle: { wallpaperEnabled: true, wallpaperMinutes: 2 }
+})
+if (!m.activeWallpaperSpec(nestedWp, "day").on) throw new Error("nested theme-cycle wallpaper spec")
+if (m.activeWallpaperSpec(m.clearSchedule(nestedWp), "day").on)
+  throw new Error("clear nested wallpaper spec")
 if (stoppedWp.recents.join() !== "nord") throw new Error("clear keeps recents")
 const stoppedSun = m.clearSchedule({ schedule: { mode: "sun", sun: { enabled: true, day: "nord" } } })
 if (stoppedSun.schedule.mode !== "off" || stoppedSun.schedule.sun.enabled) throw new Error("clear sun")

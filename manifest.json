@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.calebhat.themebook",
   "name": "ThemeBook",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "author": "calebhat",
   "license": "MIT",
   "description": "Full Omarchy theme suite: organize installed themes into folders, preview-then-apply, enhanced stock-style carousel, default wallpapers, and a scheduler for timed themes, sunrise/sunset, theme cycle, and wallpaper cycle.",

@@ -96,7 +96,9 @@ Item {
     root.manualOverride = true
     root.overridePeriod = ""
     root.lastScheduledPeriod = ""
+    root.lastAppliedBySchedule = ""
     root.wallpaperPeriodKey = ""
+    root.pendingBgNext = false
     saveConfig(next)
   }
 
@@ -125,17 +127,22 @@ Item {
   function applyTheme(slug, fromSchedule) {
     if (!Model.isValidSlug(slug) || !knownTheme(slug)) return
     if (!fromSchedule) root.stopScheduleForManualApply()
+    if (applyProc.running) {
+      root.pendingApply = slug
+      root.pendingApplyFromSchedule = fromSchedule === true
+      if (!fromSchedule) {
+        var queuedBgSlug = Model.themeSlugForBackground(root.themes, root.pendingBg)
+        if (root.pendingBg && queuedBgSlug && queuedBgSlug !== slug) root.pendingBg = ""
+        root.pendingBgNext = false
+      }
+      return
+    }
     if (slug === root.currentSlug) {
       if (root.pendingBg) {
         var same = root.pendingBg
         root.pendingBg = ""
         applyBackground(same)
       }
-      return
-    }
-    if (applyProc.running) {
-      root.pendingApply = slug
-      root.pendingApplyFromSchedule = fromSchedule === true
       return
     }
     applyProc.command = ["omarchy", "theme", "set", slug]
@@ -190,6 +197,10 @@ Item {
   }
 
   function applyNextBackground() {
+    if (!Model.activeWallpaperSpec(root.config, root.solarPeriod).on) {
+      root.pendingBgNext = false
+      return
+    }
     if (applyProc.running || bgProc.running) {
       root.pendingBgNext = true
       return
@@ -200,7 +211,7 @@ Item {
 
   function applyBackgroundAndTheme(path) {
     var slug = Model.themeSlugForBackground(root.themes, path)
-    if (slug && slug !== root.currentSlug) {
+    if (slug && (slug !== root.currentSlug || Model.activeWallpaperSpec(root.config, root.solarPeriod).on)) {
       root.pendingBg = path
       root.requestManualApply(slug)
       return
@@ -464,9 +475,8 @@ Item {
     var next = Model.normalizeConfig(root.config)
     var s = next.schedule
     if (patch.mode === "off") {
-      s.enabled = false
-      s.sun.enabled = false
-      s.mode = "off"
+      next = Model.clearSchedule(next)
+      s = next.schedule
     } else if (patch.mode === "sun") {
       s.enabled = false
       s.sun.enabled = true
@@ -672,6 +682,7 @@ Item {
   }
 
   function tickWallpaper() {
+    if (root.otherSchedulerEnabled) return
     var cfg = Model.normalizeConfig(root.config)
     var spec = Model.activeWallpaperSpec(cfg, root.solarPeriod)
     if (!spec.on) {
@@ -782,8 +793,10 @@ Item {
             var cur = ""
             for (var i = 0; i < parsed.length; i++) if (parsed[i].current) cur = parsed[i].slug
             if (cur) root.currentSlug = cur
-            var pruned = Model.pruneConfig(root.config, parsed)
-            root.config = Model.syncThemeCycleState(pruned, parsed, cur || root.currentSlug)
+            if (!(root.pendingConfigWrite || configWriter.running)) {
+              var pruned = Model.pruneConfig(root.config, parsed)
+              root.config = Model.syncThemeCycleState(pruned, parsed, cur || root.currentSlug)
+            }
             root.themes = Model.applyDefaultPreviews(parsed, root.config)
             root.catalogRevision++
             root.ensureThumbs(root.themes)
@@ -845,6 +858,14 @@ Item {
     stdout: StdioCollector { waitForEnd: true }
     onExited: {
       root.reloadCatalog()
+      if (root.pendingApply) {
+        var next = root.pendingApply
+        var fromSchedule = root.pendingApplyFromSchedule
+        root.pendingApply = ""
+        root.pendingApplyFromSchedule = false
+        root.applyTheme(next, fromSchedule)
+        return
+      }
       if (root.pendingBg) {
         var bg = root.pendingBg
         root.pendingBg = ""
@@ -852,13 +873,6 @@ Item {
       } else if (root.pendingBgNext) {
         root.pendingBgNext = false
         root.applyNextBackground()
-      }
-      if (root.pendingApply) {
-        var next = root.pendingApply
-        var fromSchedule = root.pendingApplyFromSchedule
-        root.pendingApply = ""
-        root.pendingApplyFromSchedule = false
-        root.applyTheme(next, fromSchedule)
       }
     }
   }
