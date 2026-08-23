@@ -832,7 +832,7 @@ Item {
               }
               Rectangle {
                 id: scheduleOnBadge
-                visible: Model.isScheduleActive(root.config)
+                visible: Model.isScheduleActive(root.config) && root.mainView !== "schedule"
                 anchors.verticalCenter: parent.verticalCenter
                 width: visible ? onLab.implicitWidth + Style.space(10) : 0
                 height: Style.space(16)
