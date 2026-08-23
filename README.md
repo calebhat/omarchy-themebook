@@ -55,7 +55,7 @@ omarchy restart shell
 
 `omarchy plugin add` only clones files. It does not run a setup script. Enabling the plugin is the consent to load it in `omarchy-shell`.
 
-On first start, if you do not already have one, ThemeBook copies its Apps launcher into `~/.local/share/applications/`. It never overwrites that file.
+On first start, if you do not already have one, ThemeBook copies its Apps launcher into `~/.local/share/applications/`. It never overwrites that file. It also installs `icon.png` as the Apps icon (`io.github.calebhat.themebook`).
 
 **Theme menu** is on by default for new installs. That writes a `style.theme` override in `~/.config/omarchy/extensions/omarchy-menu.jsonc` so Super+Ctrl+Shift+Space opens ThemeBook’s carousel. Turn **Theme menu** off in the catalog to remove that override and restore Omarchy’s picker. ThemeBook does not edit Hyprland or theme folders.
 

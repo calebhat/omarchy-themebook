@@ -19,8 +19,44 @@ plugins=$(realpath -e "$HOME/.config/omarchy/plugins" 2>/dev/null || true)
 
 src=$resolved/share/applications/io.github.calebhat.themebook.desktop
 dst=$HOME/.local/share/applications/io.github.calebhat.themebook.desktop
+icon_src=$resolved/icon.png
+icon_name=io.github.calebhat.themebook
 
 [[ -f $src ]] || exit 0
+
+install_app_icon() {
+  [[ -f $icon_src ]] || return 0
+  local base=$HOME/.local/share/icons/hicolor
+  local size dest
+  for size in 48 256 512; do
+    dest=$base/${size}x${size}/apps
+    mkdir -p "$dest"
+    python3 - "$icon_src" "$dest/$icon_name.png" "$size" <<'PY'
+import sys
+from PIL import Image
+src, dest, size = sys.argv[1], sys.argv[2], int(sys.argv[3])
+Image.open(src).convert("RGBA").resize((size, size), Image.Resampling.LANCZOS).save(dest, "PNG")
+PY
+  done
+  if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f "$base" >/dev/null 2>&1 || true
+  fi
+}
+
+ensure_icon_name() {
+  local file=$1
+  [[ -f $file ]] || return 0
+  grep -q '^Exec=omarchy-shell shell toggle io.github.calebhat.themebook' "$file" || return 0
+  if grep -q '^Icon=preferences-desktop-theme$' "$file"; then
+    sed -i "s|^Icon=preferences-desktop-theme$|Icon=$icon_name|" "$file"
+  elif ! grep -q '^Icon=' "$file"; then
+    if grep -q '^TryExec=' "$file"; then
+      sed -i "/^TryExec=/a Icon=$icon_name" "$file"
+    else
+      printf '\nIcon=%s\n' "$icon_name" >>"$file"
+    fi
+  fi
+}
 
 # gtk-launch / Apps "Launching…" waits for a new toplevel. ThemeBook only
 # toggles a window on the already-running shell, so that OSD stalls ~15s.
@@ -43,3 +79,5 @@ if [[ ! -e $dst ]]; then
   chmod 644 "$dst"
 fi
 ensure_startup_notify "$dst"
+ensure_icon_name "$dst"
+install_app_icon
