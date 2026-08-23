@@ -54,11 +54,18 @@ Item {
 
   readonly property var svc: service
 
+  property real themeListKeepY: 0
+  property bool themeListLockScroll: false
+
   Connections {
     target: svc
     function onRequestPanelView(name) {
       if (name === "schedule" || name === "browse") root.mainView = name
     }
+    function onConfigChanged() { root.lockThemeListScroll() }
+    function onThemesChanged() { root.lockThemeListScroll() }
+    function onFilterChanged() { root.lockThemeListScroll() }
+    function onQueryChanged() { root.lockThemeListScroll() }
   }
   readonly property var themes: svc ? svc.themes : []
   readonly property var rows: svc ? svc.rows : []
@@ -507,6 +514,23 @@ Item {
     }
     return headers
   }
+
+  function lockThemeListScroll() {
+    if (!themeList || root.themeListLockScroll) return
+    root.themeListKeepY = themeList.contentY - (themeList.originY || 0)
+    root.themeListLockScroll = true
+  }
+
+  function restoreThemeListScroll() {
+    if (!themeList || !root.themeListLockScroll) return
+    var origin = themeList.originY || 0
+    var maxY = Math.max(0, themeList.contentHeight - themeList.height)
+    themeList.contentY = origin + Math.max(0, Math.min(maxY, root.themeListKeepY))
+    root.themeListLockScroll = false
+    root.updateStickyHeader()
+  }
+
+  onRowsChanged: Qt.callLater(root.restoreThemeListScroll)
 
   function updateStickyHeader() {
     var want = ""
@@ -1088,7 +1112,13 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            onContentYChanged: root.updateStickyHeader()
+            currentIndex: -1
+            highlightFollowsCurrentItem: false
+            onContentYChanged: {
+              if (!root.themeListLockScroll)
+                root.themeListKeepY = contentY - (originY || 0)
+              root.updateStickyHeader()
+            }
             onHeightChanged: root.updateStickyHeader()
             onCountChanged: root.updateStickyHeader()
             Component.onCompleted: root.updateStickyHeader()
