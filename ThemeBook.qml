@@ -54,18 +54,11 @@ Item {
 
   readonly property var svc: service
 
-  property real themeListKeepY: 0
-  property bool themeListLockScroll: false
-
   Connections {
     target: svc
     function onRequestPanelView(name) {
       if (name === "schedule" || name === "browse") root.mainView = name
     }
-    function onConfigChanged() { root.lockThemeListScroll() }
-    function onThemesChanged() { root.lockThemeListScroll() }
-    function onFilterChanged() { root.lockThemeListScroll() }
-    function onQueryChanged() { root.lockThemeListScroll() }
   }
   readonly property var themes: svc ? svc.themes : []
   readonly property var rows: svc ? svc.rows : []
@@ -515,22 +508,12 @@ Item {
     return headers
   }
 
-  function lockThemeListScroll() {
-    if (!themeList || root.themeListLockScroll) return
-    root.themeListKeepY = themeList.contentY - (themeList.originY || 0)
-    root.themeListLockScroll = true
-  }
-
-  function restoreThemeListScroll() {
-    if (!themeList || !root.themeListLockScroll) return
-    var origin = themeList.originY || 0
+  onRowsChanged: Qt.callLater(function() {
+    if (!themeList) return
     var maxY = Math.max(0, themeList.contentHeight - themeList.height)
-    themeList.contentY = origin + Math.max(0, Math.min(maxY, root.themeListKeepY))
-    root.themeListLockScroll = false
+    if (themeList.contentY > maxY) themeList.contentY = maxY
     root.updateStickyHeader()
-  }
-
-  onRowsChanged: Qt.callLater(root.restoreThemeListScroll)
+  })
 
   function updateStickyHeader() {
     var want = ""
@@ -633,11 +616,20 @@ Item {
 
   function revealSelected() {
     if (!themeList) return
+    var y = 0
+    var sp = themeList.spacing
     for (var i = 0; i < rows.length; i++) {
-      if (rows[i].rowType === "theme" && rows[i].slug === selectedSlug) {
-        themeList.positionViewAtIndex(i, ListView.Visible)
+      var row = rows[i]
+      var h = row.rowType === "header" ? Style.space(36) : Style.space(64)
+      if (row.rowType === "theme" && row.slug === selectedSlug) {
+        var maxY = Math.max(0, themeList.contentHeight - themeList.height)
+        var cy = themeList.contentY
+        if (y < cy) themeList.contentY = y
+        else if (y + h > cy + themeList.height)
+          themeList.contentY = Math.min(maxY, y + h - themeList.height)
         return
       }
+      y += h + sp
     }
   }
 
@@ -1116,24 +1108,18 @@ Item {
               }
             }
 
-          ListView {
+          Flickable {
             id: themeList
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            currentIndex: -1
-            highlightFollowsCurrentItem: false
-            onContentYChanged: {
-              if (!root.themeListLockScroll)
-                root.themeListKeepY = contentY - (originY || 0)
-              root.updateStickyHeader()
-            }
-            onHeightChanged: root.updateStickyHeader()
-            onCountChanged: root.updateStickyHeader()
-            Component.onCompleted: root.updateStickyHeader()
-            model: root.rows
-            spacing: Style.space(4)
+            contentWidth: width
+            contentHeight: themeListCol.height
             boundsBehavior: Flickable.StopAtBounds
+            readonly property real spacing: themeListCol.spacing
+            onContentYChanged: root.updateStickyHeader()
+            onHeightChanged: root.updateStickyHeader()
+            Component.onCompleted: root.updateStickyHeader()
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
             WheelHandler {
               acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -1157,7 +1143,13 @@ Item {
               z: 100
             }
 
-            delegate: Item {
+            Column {
+              id: themeListCol
+              width: themeList.width
+              spacing: Style.space(4)
+              Repeater {
+                model: root.rows
+                delegate: Item {
               id: folderDelegate
               required property var modelData
               readonly property string folderId: String(modelData.id || "")
@@ -1538,7 +1530,9 @@ Item {
                 }
               }
             }
-          }
+                }
+              }
+            }
           }
 
           Rectangle {
