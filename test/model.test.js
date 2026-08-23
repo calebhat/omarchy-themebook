@@ -3,7 +3,7 @@ const fs = require("fs")
 const path = require("path")
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
   .replace(/^\.pragma library\s*/, "")
-eval(src + "\nmodule.exports = { defaultConfig, normalizeConfig, flatten, clockPeriod, bumpHHMM, pruneConfig, toggleInList, moveInList, isValidSlug, isReservedSection, currentPeriod, sanitizeFolderName, isCollapsed, activeRule, themeSlugForBackground, moveFolderIds, parseTimeInput, formatTimeDisplay, formatHourMinute, hourIsPm, applyMeridiem, parseClockTime, pickerSections, fuzzyMatch, minutesOf, moveIdBefore, wallpaperCyclePaths, nextWallpaper, cycleFolderChoices, isReorderableSection, themeWallpaperPaths, cycleIntervalMs, cycleSlugs, syncThemeCycleState, activeWallpaperSpec, isScheduleActive, scheduleActiveLabel, defaultWallpaper, applyDefaultPreviews, boundCatalog, foldersForSlug, addSlugToFolder, dropSlugFromFolder, replaceFolderThemes, setThemeFolders }")
+eval(src + "\nmodule.exports = { defaultConfig, normalizeConfig, flatten, clockPeriod, bumpHHMM, pruneConfig, toggleInList, moveInList, isValidSlug, isReservedSection, currentPeriod, sanitizeFolderName, isCollapsed, activeRule, themeSlugForBackground, moveFolderIds, parseTimeInput, formatTimeDisplay, formatHourMinute, hourIsPm, applyMeridiem, parseClockTime, pickerSections, fuzzyMatch, minutesOf, moveIdBefore, wallpaperCyclePaths, nextWallpaper, cycleFolderChoices, isReorderableSection, themeWallpaperPaths, cycleIntervalMs, cycleSlugs, syncThemeCycleState, activeWallpaperSpec, isScheduleActive, clearSchedule, scheduleActiveLabel, defaultWallpaper, applyDefaultPreviews, boundCatalog, foldersForSlug, addSlugToFolder, dropSlugFromFolder, replaceFolderThemes, setThemeFolders }")
 
 const m = module.exports
 const cfg = m.normalizeConfig({
@@ -112,6 +112,23 @@ if (m.activeWallpaperSpec(sunWp, "night", 0).on) throw new Error("night wallpape
 if (!m.isScheduleActive({ schedule: { mode: "rules", enabled: true } })) throw new Error("rules active")
 if (m.isScheduleActive({ schedule: { mode: "off" } })) throw new Error("off not active")
 if (m.scheduleActiveLabel({ schedule: { mode: "rules", enabled: true } }) !== "Timed Themes") throw new Error("active label")
+const stoppedWp = m.clearSchedule({
+  schedule: { mode: "wallpapers" },
+  wallpaperCycle: { enabled: true, minutes: 1, lastAt: 99 },
+  recents: ["nord"]
+})
+if (stoppedWp.schedule.mode !== "off") throw new Error("clear wallpapers mode")
+if (stoppedWp.wallpaperCycle.enabled) throw new Error("clear wallpaper cycle flag")
+if (m.isScheduleActive(stoppedWp)) throw new Error("cleared schedule still active")
+if (stoppedWp.recents.join() !== "nord") throw new Error("clear keeps recents")
+const stoppedSun = m.clearSchedule({ schedule: { mode: "sun", sun: { enabled: true, day: "nord" } } })
+if (stoppedSun.schedule.mode !== "off" || stoppedSun.schedule.sun.enabled) throw new Error("clear sun")
+const stoppedRules = m.clearSchedule({ schedule: { mode: "rules", enabled: true, rules: [{ id: "rule-1", time: "07:00", theme: "nord" }] } })
+if (stoppedRules.schedule.mode !== "off" || stoppedRules.schedule.enabled) throw new Error("clear rules")
+if (stoppedRules.schedule.rules.length !== 1) throw new Error("clear keeps rules")
+const stoppedThemes = m.clearSchedule({ schedule: { mode: "themes" }, themeCycle: { folderId: "favorites", minutes: 2 } })
+if (stoppedThemes.schedule.mode !== "off") throw new Error("clear theme cycle")
+if (stoppedThemes.themeCycle.folderId !== "favorites") throw new Error("clear keeps theme cycle folder")
 const keptMin = m.normalizeConfig({
   schedule: { mode: "rules", enabled: true, rules: [{ id: "rule-1", time: "07:00", theme: "nord", wallpaperEnabled: false, wallpaperMinutes: 11 }] }
 })

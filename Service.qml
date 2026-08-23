@@ -23,6 +23,8 @@ Item {
   property string lastAppliedBySchedule: ""
   property string overridePeriod: ""
   property string pendingApply: ""
+  property bool pendingApplyFromSchedule: false
+  property string pendingConfigWrite: ""
   property string pendingBg: ""
   property bool pendingBgNext: false
   property string wallpaperPeriodKey: ""
@@ -71,13 +73,31 @@ Item {
     return !!Model.themeBySlug(root.themes, slug)
   }
 
+  function flushConfigWrite() {
+    var payload = root.pendingConfigWrite
+    if (!payload || configWriter.running) return
+    root.pendingConfigWrite = ""
+    configWriter.command = [scriptPath("config"), "write", payload]
+    configWriter.running = true
+  }
+
   function saveConfig(next) {
     var pruned = Model.pruneConfig(next, root.themes)
     var payload = JSON.stringify(pruned)
     if (payload.length > Model.maxConfigChars()) return
     root.config = pruned
-    configWriter.command = [scriptPath("config"), "write", payload]
-    configWriter.running = true
+    root.pendingConfigWrite = payload
+    root.flushConfigWrite()
+  }
+
+  function stopScheduleForManualApply() {
+    if (!Model.isScheduleActive(root.config)) return
+    var next = Model.clearSchedule(root.config)
+    root.manualOverride = true
+    root.overridePeriod = ""
+    root.lastScheduledPeriod = ""
+    root.wallpaperPeriodKey = ""
+    saveConfig(next)
   }
 
   function requestManualApply(slug) {
@@ -93,6 +113,7 @@ Item {
   function confirmManualApply() {
     var slug = root.pendingManualSlug
     root.pendingManualSlug = ""
+    root.stopScheduleForManualApply()
     if (slug) applyTheme(slug, false)
   }
 
@@ -103,6 +124,7 @@ Item {
 
   function applyTheme(slug, fromSchedule) {
     if (!Model.isValidSlug(slug) || !knownTheme(slug)) return
+    if (!fromSchedule) root.stopScheduleForManualApply()
     if (slug === root.currentSlug) {
       if (root.pendingBg) {
         var same = root.pendingBg
@@ -113,6 +135,7 @@ Item {
     }
     if (applyProc.running) {
       root.pendingApply = slug
+      root.pendingApplyFromSchedule = fromSchedule === true
       return
     }
     applyProc.command = ["omarchy", "theme", "set", slug]
@@ -123,14 +146,8 @@ Item {
       var def = Model.defaultWallpaper(next, Model.themeBySlug(root.themes, slug))
       if (def) root.pendingBg = def
     }
-    if (fromSchedule) {
-      root.manualOverride = false
-    } else {
-      next.schedule.enabled = false
-      next.schedule.sun.enabled = false
-      next.schedule.mode = "off"
-      next.schedule = Model.normalizeSchedule(next.schedule)
-      next.wallpaperCycle.enabled = false
+    if (fromSchedule) root.manualOverride = false
+    else {
       root.manualOverride = true
       root.overridePeriod = ""
       root.lastScheduledPeriod = ""
@@ -820,6 +837,7 @@ Item {
         if (raw.length) console.warn("themebook config:", raw)
       }
     }
+    onExited: Qt.callLater(function() { root.flushConfigWrite() })
   }
 
   Process {
@@ -837,8 +855,10 @@ Item {
       }
       if (root.pendingApply) {
         var next = root.pendingApply
+        var fromSchedule = root.pendingApplyFromSchedule
         root.pendingApply = ""
-        root.applyTheme(next)
+        root.pendingApplyFromSchedule = false
+        root.applyTheme(next, fromSchedule)
       }
     }
   }
@@ -939,6 +959,7 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
+        if (root.pendingConfigWrite || configWriter.running) return
         try {
           var raw = String(text || "")
           if (raw.length > Model.maxConfigChars()) raw = "{}"

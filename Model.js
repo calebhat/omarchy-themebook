@@ -609,6 +609,17 @@ function isScheduleActive(config) {
   return mode === "rules" || mode === "sun" || mode === "themes" || mode === "wallpapers"
 }
 
+function clearSchedule(config) {
+  var next = normalizeConfig(config)
+  next.schedule.enabled = false
+  next.schedule.sun.enabled = false
+  next.schedule.mode = "off"
+  next.schedule = normalizeSchedule(next.schedule)
+  next.wallpaperCycle.enabled = false
+  next.wallpaperCycle = normalizeWallpaperCycle(next.wallpaperCycle)
+  return next
+}
+
 function scheduleActiveLabel(config) {
   var mode = (normalizeConfig(config).schedule || {}).mode
   if (mode === "rules") return "Timed Themes"
