@@ -772,6 +772,9 @@ Item {
           TextField {
             id: searchField
             Layout.fillWidth: true
+            Layout.minimumWidth: Style.space(120)
+            Layout.preferredWidth: Style.space(200)
+            Layout.maximumWidth: Style.space(280)
             placeholderText: "Search themes"
             focus: false
             color: root.fg
@@ -795,24 +798,50 @@ Item {
             color: root.accent
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
+            elide: Text.ElideRight
+            Layout.maximumWidth: Style.space(200)
           }
 
           Rectangle {
-            width: schedBtn.implicitWidth + Style.space(16)
+            Layout.alignment: Qt.AlignVCenter
+            width: schedRow.implicitWidth + Style.space(16)
             height: Style.space(26)
             radius: Style.cornerRadius
-            color: root.mainView === "schedule" || Model.isScheduleActive(root.config)
-              ? Util.alpha(root.accent, 0.32) : Util.alpha(root.fg, 0.06)
-            border.width: root.mainView === "schedule" || Model.isScheduleActive(root.config) ? 1 : 0
+            color: Model.isScheduleActive(root.config)
+              ? Util.alpha(root.accent, 0.32)
+              : (root.mainView === "schedule" ? Util.alpha(root.fg, 0.10) : Util.alpha(root.fg, 0.06))
+            border.width: Model.isScheduleActive(root.config) ? 1 : 0
             border.color: root.accent
-            Text {
-              textFormat: Text.PlainText
-              id: schedBtn
+            Row {
+              id: schedRow
               anchors.centerIn: parent
-              text: root.mainView === "schedule" ? "Themes" : "Schedule"
-              color: root.fg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
+              spacing: Style.space(6)
+              Text {
+                textFormat: Text.PlainText
+                id: schedBtn
+                text: root.mainView === "schedule" ? "Themes" : "Schedule"
+                color: root.fg
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+              Rectangle {
+                id: scheduleOnBadge
+                visible: Model.isScheduleActive(root.config)
+                width: onLab.implicitWidth + Style.space(10)
+                height: Style.space(16)
+                radius: Style.cornerRadius
+                color: root.accent
+                Text {
+                  textFormat: Text.PlainText
+                  id: onLab
+                  anchors.centerIn: parent
+                  text: "On"
+                  color: root.bg
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                }
+              }
             }
             MouseArea {
               anchors.fill: parent

@@ -41,6 +41,7 @@ need=(
   'text: "Picker"'
   'label: "Theme cycle"'
   'label: "Wallpaper cycle"'
+  'id: scheduleOnBadge'
   'text: "Also cycle wallpapers"'
   'text: "Backgrounds — pin one as default for apply and picker preview"'
   'Choose folder…'
