@@ -21,8 +21,25 @@ src=$resolved/share/applications/io.github.calebhat.themebook.desktop
 dst=$HOME/.local/share/applications/io.github.calebhat.themebook.desktop
 
 [[ -f $src ]] || exit 0
-[[ -e $dst ]] && exit 0
 
-mkdir -p "$HOME/.local/share/applications"
-cp "$src" "$dst"
-chmod 644 "$dst"
+# gtk-launch / Apps "Launching…" waits for a new toplevel. ThemeBook only
+# toggles a window on the already-running shell, so that OSD stalls ~15s.
+ensure_startup_notify() {
+  local file=$1
+  [[ -f $file ]] || return 0
+  grep -q '^Exec=omarchy-shell shell toggle io.github.calebhat.themebook' "$file" || return 0
+  if grep -q '^StartupNotify=' "$file"; then
+    sed -i 's/^StartupNotify=.*/StartupNotify=false/' "$file"
+  elif grep -q '^Terminal=' "$file"; then
+    sed -i '/^Terminal=/a StartupNotify=false' "$file"
+  else
+    printf '\nStartupNotify=false\n' >>"$file"
+  fi
+}
+
+if [[ ! -e $dst ]]; then
+  mkdir -p "$HOME/.local/share/applications"
+  cp "$src" "$dst"
+  chmod 644 "$dst"
+fi
+ensure_startup_notify "$dst"
