@@ -16,6 +16,8 @@ Item {
   property var manifest: null
   property bool closingFromHost: false
   property string selectedSlug: ""
+  property string previewWallpaper: ""
+  property string previewSlug: ""
   property string promptKind: ""
   property string promptFolderId: ""
   property string promptText: ""
@@ -169,11 +171,33 @@ Item {
     return ""
   }
 
+  function previewPath() {
+    var t = root.selected
+    if (!t) return ""
+    if (root.previewWallpaper && root.previewSlug === t.slug) return root.previewWallpaper
+    if (svc && t.slug === svc.currentSlug && t.currentBackground) return t.currentBackground
+    return t.preview || t.currentBackground || ""
+  }
+
+  function setPreviewWallpaper(path) {
+    if (!root.selected || !path) return
+    root.previewSlug = root.selected.slug
+    root.previewWallpaper = path
+  }
+
+  onSelectedSlugChanged: {
+    if (root.previewSlug !== root.selectedSlug) root.previewWallpaper = ""
+  }
+
   function applySelected() {
     if (root.folderMenuOpen || root.promptKind || root.confirmRemove) return
     if (root.addFolderId.length || root.assignSlug.length) return
     if (svc && svc.pendingManualSlug) return
-    if (selected && svc) svc.requestManualApply(selected.slug)
+    if (selected && svc) {
+      if (root.previewWallpaper && root.previewSlug === selected.slug)
+        svc.pendingBg = root.previewWallpaper
+      svc.requestManualApply(selected.slug)
+    }
   }
 
   function openAddModal(folderId) {
@@ -633,7 +657,7 @@ Item {
     }
   }
 
-  onSelectedSlugChanged: { /* user navigation calls revealSelected() */ }
+
 
   FloatingWindow {
     id: window
@@ -1558,13 +1582,7 @@ Item {
                   id: hero
                   anchors.fill: parent
                   source: {
-                    var t = root.selected
-                    if (!t) return ""
-                    var path = ""
-                    if (svc && t.slug === svc.currentSlug && t.currentBackground)
-                      path = t.currentBackground
-                    else
-                      path = t.preview || t.currentBackground || ""
+                    var path = root.previewPath()
                     return path ? Util.fileUrl(path) : ""
                   }
                   fillMode: Image.PreserveAspectCrop
@@ -1576,9 +1594,8 @@ Item {
                 Text {
                   textFormat: Text.PlainText
                   visible: {
-                    var t = root.selected
-                    if (!t) return true
-                    var path = (svc && t.slug === svc.currentSlug && t.currentBackground) ? t.currentBackground : (t.preview || t.currentBackground || "")
+                    if (!root.selected) return true
+                    var path = root.previewPath()
                     return !path || hero.status === Image.Error
                   }
                   anchors.centerIn: parent
@@ -1635,7 +1652,7 @@ Item {
               Text {
                 textFormat: Text.PlainText
                 visible: root.selected && root.selected.backgrounds && root.selected.backgrounds.length
-                text: "Backgrounds — pin one as default for apply and picker preview"
+                text: "Backgrounds — click to preview here. Star one as default for apply and picker."
                 color: root.muted
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -1652,13 +1669,14 @@ Item {
                 delegate: Rectangle {
                   required property var modelData
                   readonly property bool isDefault: !!(root.selected && Model.defaultWallpaper(root.config, root.selected) === modelData)
+                  readonly property bool isPreview: root.previewPath() === modelData
                   width: 144
                   height: 84
                   radius: Style.cornerRadius
                   clip: true
                   color: Util.alpha(root.fg, 0.06)
-                  border.width: isDefault || (root.selected && root.selected.currentBackground === modelData) ? 2 : 0
-                  border.color: isDefault ? root.accent : Util.alpha(root.fg, 0.35)
+                  border.width: isPreview || isDefault ? 2 : 0
+                  border.color: isDefault && !isPreview ? Util.alpha(root.fg, 0.35) : root.accent
                   Image {
                     anchors.fill: parent
                     source: Util.fileUrl(modelData)
@@ -1671,7 +1689,7 @@ Item {
                   MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: if (svc) svc.applyBackgroundAndTheme(modelData)
+                    onClicked: root.setPreviewWallpaper(modelData)
                   }
                   Rectangle {
                     anchors.right: parent.right

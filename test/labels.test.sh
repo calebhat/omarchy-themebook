@@ -45,7 +45,7 @@ need=(
   'id: scheduleOnBadge'
   'id: themeListCol'
   'text: "Also cycle wallpapers"'
-  'text: "Backgrounds — pin one as default for apply and picker preview"'
+  'text: "Backgrounds — click to preview here. Star one as default for apply and picker."'
   'Choose folder…'
   'text: rule && Model.hourIsPm(rule.time) ? "PM" : "AM"'
   'text: "Delete folder'

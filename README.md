@@ -27,7 +27,7 @@ No sudo or pkexec is required. No network calls. No extra packages.
 - **Picker** checkboxes on Favorites, Recents, User, Stock, and your folders choose which sections appear in the carousel.
 - **Filters** — All / Favorites / User / Stock / Light / Dark / Hidden, plus search.
 - **Move to folder** is the first preview action (then Favorite, then Edit in Aether). Hide and Show are separate buttons: Hide when the theme is visible, Show when it is hidden.
-- **Backgrounds** — click a wallpaper in the preview to apply **that theme and that wallpaper**. Star one as the **default**: it loads when you apply the theme (including from schedules) and is used for catalog and picker previews.
+- **Backgrounds** — click a wallpaper in the strip to preview it in the panel (it does not change the live theme). **Apply theme** uses the wallpaper you are previewing, or the starred **default** if you have not picked one. Star a default for apply and picker/catalog previews, including schedules.
 - **Hide** themes without uninstalling; **Hidden** filter lists them. **Show** replaces Hide when the theme is already hidden. **Unfavorite** when it is already a favorite.
 - **Remove** user themes (never stock, never the active theme) with a confirmation dialog.
 - **Update git themes** via `omarchy theme update` (shown when the selected theme is git-backed).
