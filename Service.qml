@@ -137,22 +137,32 @@ Item {
       }
       return
     }
+    var next = Model.normalizeConfig(root.config)
+    if (!root.pendingBg) {
+      var theme = Model.themeBySlug(root.themes, slug)
+      var def = Model.defaultWallpaper(next, theme)
+      if (!def && theme) {
+        var prev = String(theme.preview || "")
+        var bgs = theme.backgrounds || []
+        for (var i = 0; i < bgs.length; i++) {
+          if (bgs[i] === prev) { def = prev; break }
+        }
+      }
+      if (def) root.pendingBg = def
+    }
     if (slug === root.currentSlug) {
       if (root.pendingBg) {
         var same = root.pendingBg
         root.pendingBg = ""
         applyBackground(same)
       }
+      next.recents = Model.pushRecent(next.recents, slug)
+      saveConfig(next)
       return
     }
     applyProc.command = ["omarchy", "theme", "set", slug]
     applyProc.running = true
-    var next = Model.normalizeConfig(root.config)
     next.recents = Model.pushRecent(next.recents, slug)
-    if (!root.pendingBg) {
-      var def = Model.defaultWallpaper(next, Model.themeBySlug(root.themes, slug))
-      if (def) root.pendingBg = def
-    }
     if (fromSchedule) root.manualOverride = false
     else {
       root.manualOverride = true

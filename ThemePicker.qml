@@ -117,8 +117,10 @@ Item {
       var t = themes[i]
       var prev = root.previewFor(t)
       var thumb = t.thumbnail || ""
-      if (!thumb || thumb.indexOf("/omarchy/image-selector/") < 0)
-        thumb = prev || t.preview || thumb
+      // Full-res wallpapers (e.g. 7k PNG) freeze the carousel. Only show
+      // warmed JPEGs or ThemeBook swatches until thumbs exist.
+      if (thumb.indexOf("/omarchy/image-selector/") < 0 && thumb.indexOf("/omarchy/themebook/swatches/") < 0)
+        thumb = ""
       arr.push({
         filePath: prev,
         fileName: t.slug,
@@ -211,8 +213,18 @@ Item {
   function applySelected() {
     if (!service || imageArray.length === 0) return
     var item = imageArray[selectedIndex]
-    if (item && item.slug) service.requestManualApply(item.slug)
-    if (!service.pendingManualSlug) close()
+    if (!item || !item.slug) return
+    // Close before apply so a heavy current wallpaper (theme-set snapshots
+    // it on the shell GUI thread) cannot freeze the overlay in place.
+    if (Model.isScheduleActive(service.config)) {
+      service.requestManualApply(item.slug)
+      return
+    }
+    var slug = item.slug
+    close()
+    Qt.callLater(function() {
+      if (root.service) root.service.requestManualApply(slug)
+    })
   }
 
   function setFolder(id) {

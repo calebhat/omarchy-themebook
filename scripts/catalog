@@ -73,10 +73,30 @@ title_case() {
   sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g' <<<"$1"
 }
 
+# Prefer slug.png / 0-slug.jpg over lexicographic first (0-other.jpg).
+identity_background() {
+  local theme_path=$1
+  local slug=$2
+  local candidate base stem
+  [[ -d $theme_path/backgrounds ]] || return 0
+  while IFS= read -r candidate; do
+    short_path "$candidate" || continue
+    path_allowed "$candidate" "$slug" || continue
+    base=${candidate##*/}
+    stem=${base%.*}
+    if [[ $stem == "$slug" || $stem =~ ^[0-9]+[-_]$slug$ ]]; then
+      realpath -e "$candidate"
+      return
+    fi
+  done < <(capped_find "$MAX_BACKGROUNDS" find -P "$theme_path/backgrounds" -maxdepth 1 -type f \
+    \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) \
+    -print | sort)
+}
+
 find_preview() {
   local theme_path=$1
   local slug=${theme_path##*/}
-  local preview_name candidate
+  local preview_name candidate identity
   for preview_name in preview.png preview.jpg preview.jpeg preview.webp preview.gif preview.bmp; do
     candidate=$theme_path/$preview_name
     if [[ -f $candidate ]] && short_path "$candidate" && path_allowed "$candidate" "$slug"; then
@@ -84,6 +104,11 @@ find_preview() {
       return
     fi
   done
+  identity=$(identity_background "$theme_path" "$slug")
+  if [[ -n $identity ]]; then
+    printf '%s\n' "$identity"
+    return
+  fi
   if [[ -d $theme_path/backgrounds ]]; then
     while IFS= read -r candidate; do
       if short_path "$candidate" && path_allowed "$candidate" "$slug"; then
