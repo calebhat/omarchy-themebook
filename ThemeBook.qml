@@ -545,10 +545,9 @@ Item {
       var cy = Math.max(0, themeList.contentY - (themeList.originY || 0))
       var headers = root.sectionHeaderLayout()
       for (var i = 0; i < headers.length; i++) {
-        if (headers[i].top <= cy + 8) want = headers[i].id
+        if (headers[i].bottom <= cy + 1) want = headers[i].id
         else break
       }
-      if (!want && headers.length) want = headers[0].id
     }
     if (want !== root.stickyFolderId) root.stickyFolderId = want
   }
@@ -985,8 +984,9 @@ Item {
           spacing: Style.space(12)
 
           ColumnLayout {
-            Layout.preferredWidth: 380
-            Layout.maximumWidth: 380
+            Layout.preferredWidth: Style.space(420)
+            Layout.minimumWidth: Style.space(360)
+            Layout.maximumWidth: Style.space(560)
             Layout.fillWidth: false
             Layout.fillHeight: true
             spacing: Style.space(6)
@@ -1097,9 +1097,10 @@ Item {
 
             Rectangle {
               id: stickyBar
+              visible: root.stickyFolderId.length > 0
               Layout.fillWidth: true
-              Layout.preferredHeight: Style.space(36)
-              Layout.minimumHeight: Style.space(36)
+              Layout.preferredHeight: visible ? Style.space(36) : 0
+              Layout.minimumHeight: visible ? Style.space(36) : 0
               radius: Style.cornerRadius
               color: Util.alpha(root.fg, 0.08)
               border.width: 1
@@ -1185,6 +1186,7 @@ Item {
                 id: headerRow
                 visible: modelData.rowType === "header"
                 anchors.fill: parent
+                clip: true
                 z: root.draggingFolderId === modelData.id ? 20 : 0
 
                 Rectangle {
@@ -1237,7 +1239,9 @@ Item {
                   Text {
                     textFormat: Text.PlainText
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     elide: Text.ElideRight
+                    wrapMode: Text.NoWrap
                     text: (modelData.collapsed ? "▸ " : "▾ ") + (modelData.title || "") + " (" + String(modelData.themeCount != null ? modelData.themeCount : 0) + ")"
                     color: root.fg
                     font.family: root.fontFamily
@@ -1384,12 +1388,14 @@ Item {
                   Rectangle {
                     visible: modelData.id === "favorites" || modelData.id === "recents" || modelData.id === "user" || modelData.id === "stock" || !Model.isReservedSection(modelData.id)
                     Layout.preferredHeight: Style.space(22)
-                    Layout.preferredWidth: Style.space(78)
+                    Layout.preferredWidth: pickerInner.implicitWidth + Style.space(14)
+                    Layout.minimumWidth: pickerInner.implicitWidth + Style.space(14)
                     radius: Style.cornerRadius
                     color: root.folderShowsInPicker(modelData.id) ? Util.alpha(root.accent, 0.32) : Util.alpha(root.fg, 0.1)
                     border.width: 1
                     border.color: root.folderShowsInPicker(modelData.id) ? root.accent : Util.alpha(root.fg, 0.28)
                     Row {
+                      id: pickerInner
                       anchors.centerIn: parent
                       spacing: Style.space(4)
                       Rectangle {
