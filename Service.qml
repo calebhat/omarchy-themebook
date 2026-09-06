@@ -29,6 +29,11 @@ Item {
   property bool pendingBgNext: false
   property string wallpaperPeriodKey: ""
   property string pendingManualSlug: ""
+  property string pendingRemoveSlug: ""
+  property bool updateOpen: false
+  property bool updateRunning: false
+  property int updateTotal: 0
+  property var updateRows: []
   signal requestPanelView(string name)
   property bool manualOverride: false
   property bool installing: false
@@ -229,21 +234,79 @@ Item {
     applyBackground(path)
   }
 
+  function closeGitUpdate() {
+    if (root.updateRunning) return
+    root.updateOpen = false
+    root.updateRows = []
+    root.updateTotal = 0
+  }
+
+  function ingestGitUpdateLine(line) {
+    var o = Model.parseGitUpdateLine(line)
+    if (!o) return
+    if (o.event === "start") {
+      root.updateTotal = o.total
+      return
+    }
+    if (o.event === "done") return
+    if (o.event !== "theme") return
+    var rows = (root.updateRows || []).slice()
+    var found = false
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].slug === o.slug) {
+        rows[i] = { slug: o.slug, name: o.name, status: o.status, detail: o.detail }
+        found = true
+        break
+      }
+    }
+    if (!found)
+      rows.push({ slug: o.slug, name: o.name, status: o.status, detail: o.detail })
+    if (rows.length > Model.maxThemes()) rows = rows.slice(0, Model.maxThemes())
+    root.updateRows = rows
+  }
+
   function updateGitThemes() {
-    updateProc.command = ["omarchy", "theme", "update"]
+    if (updateProc.running) {
+      root.updateOpen = true
+      return
+    }
+    var cmd = scriptPath("update-git")
+    if (!cmd) return
+    root.updateOpen = true
+    root.updateRunning = true
+    root.updateTotal = 0
+    root.updateRows = []
+    updateProc.command = [cmd]
     updateProc.running = true
   }
 
   function removeTheme(slug) {
     if (!Model.isValidSlug(slug) || !knownTheme(slug)) return
     var t = Model.themeBySlug(root.themes, slug)
-    if (!t || t.source !== "user" || slug === root.currentSlug) return
-    removeProc.command = ["omarchy", "theme", "remove", slug]
+    if (!Model.canDeleteFromOs(t, root.currentSlug)) return
+    if (removeProc.running) return
+    var cmd = scriptPath("remove")
+    if (!cmd) return
+    root.pendingRemoveSlug = slug
+    removeProc.command = [cmd, slug]
     removeProc.running = true
   }
 
   function openPicker() {
     pickerOverlay.open()
+  }
+
+  function closePicker() {
+    if (pickerOverlay.opened) pickerOverlay.close()
+  }
+
+  function togglePicker() {
+    if (pickerOverlay.opened) {
+      pickerOverlay.close()
+      return "closed"
+    }
+    pickerOverlay.open()
+    return "open"
   }
 
   function openAether(theme) {
@@ -900,14 +963,29 @@ Item {
 
   Process {
     id: updateProc
-    stdout: StdioCollector { waitForEnd: true }
-    onExited: root.reloadCatalog()
+    stdout: SplitParser {
+      onRead: function(line) { root.ingestGitUpdateLine(line) }
+    }
+    stderr: SplitParser {
+      onRead: function(line) { root.ingestGitUpdateLine(line) }
+    }
+    onExited: function() {
+      root.updateRunning = false
+      root.updateOpen = true
+      root.reloadCatalog()
+    }
   }
 
   Process {
     id: removeProc
     stdout: StdioCollector { waitForEnd: true }
-    onExited: root.reloadCatalog()
+    onExited: function(code) {
+      var slug = root.pendingRemoveSlug
+      root.pendingRemoveSlug = ""
+      if (code === 0 && slug)
+        saveConfig(Model.dropThemeFromConfig(root.config, slug))
+      root.reloadCatalog()
+    }
   }
 
   Process {
@@ -1154,7 +1232,11 @@ Item {
     }
 
     function pick(): string {
-      root.openPicker()
+      return root.togglePicker()
+    }
+
+    function updateGit(): string {
+      root.updateGitThemes()
       return "ok"
     }
 

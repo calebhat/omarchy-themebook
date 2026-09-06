@@ -1,0 +1,102 @@
+#!/bin/bash
+# Pull user-installed git themes. JSON lines on stdout for a progress overlay.
+# Same extras rule as omarchy-theme-extras: real dirs with a .git directory.
+
+set -euo pipefail
+
+if [[ ${THEMEBOOK_UPDATE_WRAPPED:-0} != 1 ]] && command -v stdbuf >/dev/null 2>&1; then
+  export THEMEBOOK_UPDATE_WRAPPED=1
+  exec stdbuf -oL -eL /bin/bash "$0" "$@"
+fi
+
+export GIT_TERMINAL_PROMPT=0
+MAX_THEMES=256
+MAX_DETAIL=240
+USER_THEMES=$HOME/.config/omarchy/themes
+
+title_case() {
+  sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g' <<<"$1"
+}
+
+emit() {
+  jq -cn "$@"
+}
+
+emit_start() {
+  emit --argjson total "$1" '{event:"start",total:$total}'
+}
+
+emit_done() {
+  emit '{event:"done"}'
+}
+
+emit_theme() {
+  local slug=$1 status=$2 detail=$3
+  emit --arg slug "$slug" --arg name "$(title_case "$slug")" --arg status "$status" --arg detail "$detail" \
+    '{event:"theme",slug:$slug,name:$name,status:$status,detail:$detail}'
+}
+
+clip() {
+  local s=$1
+  s=${s//$'\r'/ }
+  s=$(tr -cd '\11\12\40-\176' <<<"$s" | tr '\n' ' ')
+  s=${s##+([[:space:]])}
+  s=${s%%+([[:space:]])}
+  if (( ${#s} > MAX_DETAIL )); then
+    s=${s:0:MAX_DETAIL}
+  fi
+  printf '%s' "$s"
+}
+
+shopt -s extglob
+
+if [[ ! -d $USER_THEMES ]]; then
+  emit_start 0
+  emit_done
+  exit 0
+fi
+
+themes=()
+for theme in "$USER_THEMES"/*; do
+  [[ -d $theme && ! -L $theme && -d $theme/.git ]] || continue
+  slug=${theme##*/}
+  [[ $slug =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $slug != *..* ]] || continue
+  themes+=("$theme")
+  (( ${#themes[@]} < MAX_THEMES )) || break
+done
+
+emit_start ${#themes[@]}
+if (( ${#themes[@]} == 0 )); then
+  emit_done
+  exit 0
+fi
+
+failed=0
+for theme in "${themes[@]}"; do
+  slug=${theme##*/}
+  emit_theme "$slug" updating ""
+  st=0
+  out=""
+  if command -v timeout >/dev/null 2>&1; then
+    out=$(timeout --signal=TERM --kill-after=2s 45s git -C "$theme" pull 2>&1) || st=$?
+  else
+    out=$(git -C "$theme" pull 2>&1) || st=$?
+  fi
+  detail=$(clip "$out")
+  if (( st == 0 )); then
+    if [[ ${out,,} == *already\ up\ to\ date* ]]; then
+      emit_theme "$slug" current "$detail"
+    else
+      emit_theme "$slug" updated "$detail"
+    fi
+  elif (( st == 124 || st == 137 )); then
+    failed=1
+    emit_theme "$slug" failed "timed out"
+  else
+    failed=1
+    emit_theme "$slug" failed "${detail:-git pull failed}"
+  fi
+done
+
+emit_done
+exit "$failed"

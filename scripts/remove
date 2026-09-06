@@ -1,0 +1,77 @@
+#!/bin/bash
+# Delete a user-installed Omarchy theme from disk: the user theme dir and
+# extra wallpapers. Never touches /usr/share/omarchy/themes.
+
+set -euo pipefail
+
+slug=${1-}
+if [[ ! $slug =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || $slug == *..* ]]; then
+  printf '%s\n' '{"ok":false,"error":"invalid-slug"}'
+  exit 1
+fi
+
+user_root=$HOME/.config/omarchy/themes
+extra_root=$HOME/.config/omarchy/backgrounds
+stock_root=${OMARCHY_PATH:-/usr/share/omarchy}/themes
+current=$(tr -d '\n' <"$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null || true)
+
+emit() {
+  local ok=$1 err=$2 theme=$3 extra=$4 stock=$5
+  jq -cn \
+    --argjson ok "$ok" \
+    --arg error "$err" \
+    --arg slug "$slug" \
+    --argjson removedTheme "$theme" \
+    --argjson removedBackgrounds "$extra" \
+    --argjson stockRemains "$stock" \
+    '{ok:$ok,error:$error,slug:$slug,removedTheme:$removedTheme,removedBackgrounds:$removedBackgrounds,stockRemains:$stockRemains}'
+}
+
+stock_remains=false
+[[ -d $stock_root/$slug ]] && stock_remains=true
+
+if [[ $slug == "$current" ]]; then
+  emit false current false false "$stock_remains"
+  exit 1
+fi
+
+user_dir=$user_root/$slug
+extra_dir=$extra_root/$slug
+removed_theme=false
+removed_extra=false
+
+unlink_under() {
+  local parent=$1
+  local path=$2
+  local parent_real path_real
+  [[ -e $path || -L $path ]] || return 1
+  parent_real=$(realpath -e "$parent") || return 1
+  if [[ -L $path ]]; then
+    [[ ${path##*/} == "$slug" ]] || return 1
+    rm -f "$path"
+    return 0
+  fi
+  [[ -d $path ]] || return 1
+  path_real=$(realpath -e "$path") || return 1
+  [[ $path_real == "$parent_real/$slug" ]] || return 1
+  rm -rf "$path"
+}
+
+if [[ -e $user_dir || -L $user_dir ]]; then
+  if unlink_under "$user_root" "$user_dir"; then
+    removed_theme=true
+  fi
+fi
+
+if [[ -e $extra_dir || -L $extra_dir ]]; then
+  if unlink_under "$extra_root" "$extra_dir"; then
+    removed_extra=true
+  fi
+fi
+
+if [[ $removed_theme == false && $removed_extra == false ]]; then
+  emit false not-user false false "$stock_remains"
+  exit 1
+fi
+
+emit true "" "$removed_theme" "$removed_extra" "$stock_remains"

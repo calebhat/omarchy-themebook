@@ -81,6 +81,62 @@ function capString(s, max) {
   return s
 }
 
+function parseGitUpdateLine(line) {
+  var raw = String(line || "")
+  if (!raw || raw.length > 1024) return null
+  var o
+  try { o = JSON.parse(raw) } catch (e) { return null }
+  if (!o || typeof o !== "object") return null
+  var ev = String(o.event || "")
+  if (ev === "start") {
+    var total = Number(o.total) || 0
+    if (total < 0) total = 0
+    if (total > MAX_THEMES) total = MAX_THEMES
+    return { event: "start", total: total }
+  }
+  if (ev === "done") return { event: "done" }
+  if (ev === "theme") {
+    var slug = String(o.slug || "")
+    if (!isValidSlug(slug)) return null
+    var status = String(o.status || "")
+    if (status !== "updating" && status !== "updated" && status !== "current" && status !== "failed")
+      return null
+    return {
+      event: "theme",
+      slug: slug,
+      name: capString(o.name || slug, MAX_NAME),
+      status: status,
+      detail: capString(o.detail || "", 240)
+    }
+  }
+  return null
+}
+
+function gitUpdateSummary(rows) {
+  var list = rows || []
+  var updated = 0
+  var current = 0
+  var failed = 0
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].status === "updated") updated++
+    else if (list[i].status === "current") current++
+    else if (list[i].status === "failed") failed++
+  }
+  if (!list.length) return "No git-installed user themes to update."
+  var parts = []
+  if (updated) parts.push(updated + (updated === 1 ? " updated" : " updated"))
+  if (current) parts.push(current + " already current")
+  if (failed) parts.push(failed + (failed === 1 ? " failed" : " failed"))
+  if (!parts.length) return "Checking git themes…"
+  return parts.join(" · ")
+}
+
+function hasGitThemes(themes) {
+  var list = themes || []
+  for (var i = 0; i < list.length; i++) if (list[i] && list[i].git) return true
+  return false
+}
+
 function capPath(s) {
   s = String(s == null ? "" : s)
   if (!s || s.indexOf("..") >= 0 || s.length > MAX_PATH) return ""
@@ -89,6 +145,7 @@ function capPath(s) {
 
 function maxCatalogChars() { return MAX_CATALOG_CHARS }
 function maxConfigChars() { return MAX_CONFIG_CHARS }
+function maxThemes() { return MAX_THEMES }
 
 function boundCatalog(themes) {
   if (!Array.isArray(themes)) return []
@@ -765,6 +822,43 @@ function knownSlugs(themes) {
   return set
 }
 
+function dropThemeFromConfig(config, slug) {
+  var cfg = normalizeConfig(config)
+  if (!isValidSlug(slug)) return cfg
+  function without(list) {
+    var out = []
+    for (var i = 0; i < list.length; i++) if (list[i] !== slug) out.push(list[i])
+    return out
+  }
+  cfg.favorites = without(cfg.favorites)
+  cfg.hidden = without(cfg.hidden)
+  cfg.recents = without(cfg.recents)
+  for (var f = 0; f < cfg.folders.length; f++)
+    cfg.folders[f].themes = without(cfg.folders[f].themes)
+  if (cfg.schedule.day === slug) cfg.schedule.day = ""
+  if (cfg.schedule.night === slug) cfg.schedule.night = ""
+  for (var r = 0; r < cfg.schedule.rules.length; r++) {
+    if (cfg.schedule.rules[r].theme === slug) cfg.schedule.rules[r].theme = ""
+  }
+  if (cfg.schedule.sun.day === slug) cfg.schedule.sun.day = ""
+  if (cfg.schedule.sun.night === slug) cfg.schedule.sun.night = ""
+  if (cfg.picker.lastSlug === slug) cfg.picker.lastSlug = ""
+  var defaults = {}
+  for (var k in cfg.defaultWallpapers) {
+    if (k !== slug) defaults[k] = cfg.defaultWallpapers[k]
+  }
+  cfg.defaultWallpapers = defaults
+  if (cfg.themeCycle && cfg.themeCycle.lastSlug === slug) cfg.themeCycle.lastSlug = ""
+  return cfg
+}
+
+function canDeleteFromOs(theme, currentSlug) {
+  if (!theme || theme.source !== "user") return false
+  if (!isValidSlug(theme.slug)) return false
+  if (theme.slug === currentSlug) return false
+  return true
+}
+
 function pruneConfig(config, themes) {
   var cfg = normalizeConfig(config)
   if (!themes || !themes.length) return cfg
@@ -1197,4 +1291,36 @@ function stampWallpaperLastAt(config, spec, now) {
   } else if (spec.store === "sun-day") cfg.schedule.sun.dayWallpaperLastAt = now
   else if (spec.store === "sun-night") cfg.schedule.sun.nightWallpaperLastAt = now
   return cfg
+}
+
+function colorKeys() {
+  return ["accent", "background", "foreground", "red", "orange", "yellow", "green", "cyan", "blue", "magenta"]
+}
+
+function normalizeHex(hex) {
+  var s = String(hex || "").trim()
+  if (!s) return ""
+  if (s.charAt(0) !== "#") s = "#" + s
+  if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s)) return ""
+  return s.toLowerCase()
+}
+
+function colorFor(hex) {
+  return normalizeHex(hex) || "transparent"
+}
+
+function paletteLines(colors) {
+  var keys = colorKeys()
+  var c = colors || {}
+  var out = []
+  for (var i = 0; i < keys.length; i++) {
+    var hex = normalizeHex(c[keys[i]])
+    if (!hex) continue
+    out.push(keys[i] + " = \"" + hex + "\"")
+  }
+  return out
+}
+
+function paletteText(colors) {
+  return paletteLines(colors).join("\n")
 }

@@ -20,6 +20,7 @@ No sudo or pkexec is required. No network calls. No extra packages.
 
 - **Catalog** of the same installed themes as Style > Theme (user overlays win on slug). The header shows the current theme. **Collapse all** / **Expand all** fold every section at once.
 - **Select then apply** — click a card to preview (colors, backgrounds, source, git); the desktop changes only on **Apply theme**, Enter, or double-click.
+- **Colors** — click a swatch to copy that hex (`#89b4fa`). **Copy palette** copies the named colors as a `key = "#hex"` list you can paste into another program.
 - **Favorites** starred from the list or the preview; **Random favorite** applies one at random.
 - **Recents** is always listed (default: under Favorites), even when empty.
 - **Folders** you create (**New folder**), rename, and delete (confirmation; themes stay installed). **Add themes** on a user folder opens a checklist: check to add, uncheck to remove. **Move to folder** on a selected theme does the same from the theme side (a theme can be in more than one folder). **✕** on a theme row inside a folder removes it from that folder, next to Favorite. User and Stock still list every theme. Rename and Delete sit in a **⋯** menu on user folders.
@@ -29,8 +30,8 @@ No sudo or pkexec is required. No network calls. No extra packages.
 - **Move to folder** is the first preview action (then Favorite, then Edit in Aether). Hide and Show are separate buttons: Hide when the theme is visible, Show when it is hidden.
 - **Backgrounds** — click a wallpaper in the strip to preview it in the panel (it does not change the live theme). **Apply theme** uses the wallpaper you are previewing, or the starred **default** if you have not picked one. Star a default for apply and picker/catalog previews, including schedules.
 - **Hide** themes without uninstalling; **Hidden** filter lists them. **Show** replaces Hide when the theme is already hidden. **Unfavorite** when it is already a favorite.
-- **Remove** user themes (never stock, never the active theme) with a confirmation dialog.
-- **Update git themes** via `omarchy theme update` (shown when the selected theme is git-backed).
+- **Delete from OS** user themes (never packaged stock, never the active theme) with a confirmation dialog. This deletes `~/.config/omarchy/themes/<slug>` and extra wallpapers in `~/.config/omarchy/backgrounds/<slug>`. Packaged copies under `/usr/share/omarchy/themes` stay. Delete or the **Delete from OS** button.
+- **Update git themes** is always in the header (catalog and schedule). It pulls every user git clone. A progress overlay lists each theme and whether it updated, was already current, or failed. `U` opens it. The preview-pane button still appears on a git-backed selection.
 - **Edit in Aether** (optional) opens the Aether GUI with the theme wallpaper loaded for editing. It does not apply the theme through Aether.
 - **Theme menu** (checkbox, on for new installs) can replace Super+Ctrl+Shift+Space / Style > Theme with ThemeBook’s enhanced stock-style carousel. Toggle off to restore Omarchy’s picker.
 - **Carousel picker** — skewed previews like stock Omarchy, folder tiles above, type-to-filter (folders and themes independently), ↑/↓ between rows, ←/→ to move, Esc clears filter then closes. New installs open **All**, with Stock and User included (Favorites is still empty until you star themes). Remembers last folder, theme, and whether focus was on folders or themes. Open with `omarchy-shell themebook pick`.
@@ -87,6 +88,8 @@ Catalog (also printed at the bottom of that view):
 | `j` / `k` or ↑ / ↓ | Move selection |
 | `F` | Favorite |
 | `H` | Hide |
+| `U` | Update git themes |
+| `Delete` | Delete from OS (user themes only) |
 | `Shift+↑/↓` | Sort inside the current folder or favorites |
 | `Shift+←/→` | Reorder folders |
 | `N` | New folder |
@@ -133,7 +136,7 @@ Optional tools (already common on Omarchy, not installed by this plugin):
 
 ## Security notes
 
-- Applies themes with `omarchy theme set <slug>` as argv, never `bash -c`.
+- Applies themes with `omarchy theme set <slug>` as argv, never `bash -c`. Deletes user themes with `scripts/remove <slug>` (argv-only); the helper refuses the current theme, invalid slugs, and anything outside the user themes/backgrounds trees. It never writes under `/usr/share`. Git updates use `scripts/update-git` (argv-only, `GIT_TERMINAL_PROMPT=0`, 45s per theme); it only pulls real user dirs with a `.git` directory.
 - Preview and background paths must resolve under the real theme directory (symlink themes included). Directory symlinks under `backgrounds/` are not followed out of the tree. Catalog JSON is capped (256 themes, 48 backgrounds each, 1 MiB). The catalog helper runs under one 12s TERM / 2s KILL deadline; `find` is item-capped before sort. `themebook.json` is size-checked with `stat` before any bytes are copied into the shell (max 256 KiB). Folder and theme names render as plain text.
 - **Theme menu** edits `omarchy-menu.jsonc` only while that checkbox is on; turning it off deletes the override.
 - The Apps `.desktop` file is created only if it does not already exist.

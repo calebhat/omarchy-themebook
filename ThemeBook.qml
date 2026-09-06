@@ -53,6 +53,8 @@ Item {
   property string stickyFolderId: ""
   property real stickyHeaderY: 0
   property var stickyHeaderRow: null
+  property string copyNotice: ""
+  property string hoverColorKey: ""
 
   readonly property var svc: service
 
@@ -129,6 +131,7 @@ Item {
       if (svc && typeof svc.openPicker === "function") svc.openPicker()
       return
     }
+    if (svc && typeof svc.closePicker === "function") svc.closePicker()
     window.visible = true
     if (svc && svc.currentSlug && !selectedSlug) selectedSlug = svc.currentSlug
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
@@ -187,6 +190,8 @@ Item {
 
   onSelectedSlugChanged: {
     if (root.previewSlug !== root.selectedSlug) root.previewWallpaper = ""
+    root.copyNotice = ""
+    root.hoverColorKey = ""
   }
 
   function applySelected() {
@@ -619,14 +624,29 @@ Item {
     svc.moveSectionInsert(fromId, before, atEnd)
   }
 
-  function colorKeys() {
-    return ["accent", "background", "foreground", "red", "orange", "yellow", "green", "cyan", "blue", "magenta"]
+  function copyToClipboard(text, notice) {
+    var value = String(text || "")
+    if (!value) return
+    Quickshell.execDetached(["wl-copy", "--", value])
+    root.copyNotice = notice || "Copied"
+    copyNoticeClear.restart()
   }
 
-  function colorFor(hex) {
-    var s = String(hex || "")
-    if (!/^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?([0-9a-fA-F]{2})?$/.test(s)) return "transparent"
-    return s
+  function hoverColorHint() {
+    if (!root.selected) return ""
+    var key = root.hoverColorKey
+    if (key) {
+      var hex = Model.normalizeHex(root.selected.colors ? root.selected.colors[key] : "")
+      if (hex) return key + "  " + hex
+    }
+    return "Click a color to copy its hex"
+  }
+
+  function copySelectedPalette() {
+    if (!root.selected) return
+    var text = Model.paletteText(root.selected.colors)
+    if (!text) return
+    root.copyToClipboard(text, "Copied palette")
   }
 
   function folderActMenuOpensUp(btn, popH) {
@@ -659,6 +679,12 @@ Item {
 
 
 
+  Timer {
+    id: copyNoticeClear
+    interval: 1800
+    onTriggered: root.copyNotice = ""
+  }
+
   FloatingWindow {
     id: window
     title: "ThemeBook"
@@ -669,7 +695,10 @@ Item {
     visible: false
 
     onVisibleChanged: {
-      if (!visible && !root.closingFromHost && root.shell && typeof root.shell.hide === "function")
+      // Initial visible:false must not hide() — that unloads the panel
+      // before open() can map the window, leaving exclusive-focus overlays.
+      if (visible || root.closingFromHost) return
+      if (root.shell && typeof root.shell.hide === "function")
         root.shell.hide("io.github.calebhat.themebook")
     }
 
@@ -679,6 +708,13 @@ Item {
       focus: true
 
       Keys.onPressed: function(event) {
+        if (svc && svc.updateOpen) {
+          if (event.key === Qt.Key_Escape && !svc.updateRunning) {
+            svc.closeGitUpdate()
+            event.accepted = true
+          }
+          return
+        }
         if (svc && svc.pendingManualSlug) {
           if (event.key === Qt.Key_Escape) { svc.cancelManualApply(); event.accepted = true }
           else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { svc.confirmManualApply(); event.accepted = true }
@@ -699,6 +735,11 @@ Item {
         }
         if (root.cycleFolderPickOpen) {
           if (event.key === Qt.Key_Escape) { root.cycleFolderPickOpen = false; event.accepted = true }
+          return
+        }
+        if (event.key === Qt.Key_U && !(event.modifiers & Qt.ShiftModifier)) {
+          if (svc) svc.updateGitThemes()
+          event.accepted = true
           return
         }
         if (root.mainView === "schedule") {
@@ -788,6 +829,10 @@ Item {
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { root.applySelected(); event.accepted = true }
         else if (event.key === Qt.Key_F) { if (svc && selectedSlug) svc.toggleFavorite(selectedSlug); event.accepted = true }
         else if (event.key === Qt.Key_H) { if (svc && selectedSlug) svc.toggleHidden(selectedSlug); event.accepted = true }
+        else if (event.key === Qt.Key_Delete) {
+          if (svc && Model.canDeleteFromOs(root.selected, svc.currentSlug)) root.confirmRemove = true
+          event.accepted = true
+        }
         else if (event.key === Qt.Key_E) { if (svc && root.selected) svc.openAether(root.selected); event.accepted = true }
         else if (event.key === Qt.Key_N) {
           root.promptKind = "folder"
@@ -904,6 +949,32 @@ Item {
               anchors.fill: parent
               cursorShape: Qt.PointingHandCursor
               onClicked: root.mainView = root.mainView === "schedule" ? "browse" : "schedule"
+            }
+          }
+
+          Rectangle {
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: updateGitLab.implicitWidth + Style.space(16)
+            implicitHeight: Style.space(26)
+            radius: Style.cornerRadius
+            color: (svc && svc.updateRunning)
+              ? Util.alpha(root.accent, 0.32)
+              : Util.alpha(root.fg, 0.06)
+            border.width: (svc && svc.updateOpen) ? 1 : 0
+            border.color: root.accent
+            Text {
+              textFormat: Text.PlainText
+              id: updateGitLab
+              anchors.centerIn: parent
+              text: (svc && svc.updateRunning) ? "Updating…" : "Update git themes"
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: if (svc) svc.updateGitThemes()
             }
           }
 
@@ -1630,21 +1701,71 @@ Item {
                 font.pixelSize: Style.font.bodySmall
               }
 
-              Row {
-                spacing: Style.space(5)
-                Repeater {
-                  model: root.selected ? root.colorKeys() : []
-                  delegate: Rectangle {
-                    required property var modelData
-                    width: Style.space(16)
-                    height: Style.space(16)
-                    radius: Style.cornerRadius
-                    color: {
-                      var hex = root.selected && root.selected.colors ? root.selected.colors[modelData] : ""
-                      return root.colorFor(hex)
+              RowLayout {
+                Layout.fillWidth: true
+                spacing: Style.space(8)
+                visible: !!root.selected
+
+                Row {
+                  spacing: Style.space(5)
+                  Repeater {
+                    model: root.selected ? Model.colorKeys() : []
+                    delegate: Rectangle {
+                      required property var modelData
+                      readonly property string hex: {
+                        var raw = root.selected && root.selected.colors ? root.selected.colors[modelData] : ""
+                        return Model.normalizeHex(raw)
+                      }
+                      width: Style.space(16)
+                      height: Style.space(16)
+                      radius: Style.cornerRadius
+                      color: Model.colorFor(hex)
+                      border.width: 1
+                      border.color: Util.alpha(root.fg, 0.25)
+                      Accessible.role: Accessible.Button
+                      Accessible.name: hex ? ("Copy " + modelData + " " + hex) : modelData
+                      MouseArea {
+                        anchors.fill: parent
+                        enabled: hex !== ""
+                        hoverEnabled: true
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onEntered: root.hoverColorKey = modelData
+                        onExited: if (root.hoverColorKey === modelData) root.hoverColorKey = ""
+                        onClicked: if (hex) root.copyToClipboard(hex, "Copied " + hex)
+                      }
                     }
-                    border.width: 1
-                    border.color: Util.alpha(root.fg, 0.25)
+                  }
+                }
+
+                Text {
+                  textFormat: Text.PlainText
+                  Layout.fillWidth: true
+                  elide: Text.ElideRight
+                  text: root.copyNotice || root.hoverColorHint()
+                  color: root.copyNotice ? root.accent : root.muted
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+
+                Rectangle {
+                  visible: !!(root.selected && Model.paletteText(root.selected.colors))
+                  width: paletteBtnLabel.implicitWidth + Style.space(16)
+                  height: Style.space(30)
+                  radius: Style.cornerRadius
+                  color: Util.alpha(root.fg, 0.08)
+                  Text {
+                    textFormat: Text.PlainText
+                    id: paletteBtnLabel
+                    anchors.centerIn: parent
+                    text: "Copy palette"
+                    color: root.fg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.copySelectedPalette()
                   }
                 }
               }
@@ -1728,7 +1849,7 @@ Item {
                     { id: "show", label: "Show" },
                     { id: "random", label: "Random favorite" },
                     { id: "update", label: "Update git themes" },
-                    { id: "remove", label: "Remove" },
+                    { id: "remove", label: "Delete from OS" },
                     { id: "apply", label: "Apply theme" }
                   ]
                   delegate: Rectangle {
@@ -1739,7 +1860,7 @@ Item {
                       if (modelData.id === "hide") return root.config.hidden.indexOf(root.selectedSlug) < 0
                       if (modelData.id === "show") return root.config.hidden.indexOf(root.selectedSlug) >= 0
                       if (modelData.id === "update") return !!(root.selected && root.selected.git)
-                      if (modelData.id === "remove") return !!(root.selected && root.selected.source === "user" && root.selected.slug !== (svc ? svc.currentSlug : ""))
+                      if (modelData.id === "remove") return !!(svc && Model.canDeleteFromOs(root.selected, svc.currentSlug))
                       if (modelData.id === "random") return !!(root.config.favorites && root.config.favorites.length)
                       return true
                     }
@@ -2670,7 +2791,7 @@ Item {
           Layout.fillWidth: true
           text: root.mainView === "schedule"
             ? "Esc catalog   Tab mode   C 12/24   ↑/↓ row   ←/→ field   Enter activate   A add time"
-            : "F Favorite   H Hide   Shift+↑/↓ Sort in folder   Shift+←/→ Sort folders   N New folder   Enter Apply   E Aether   R Random favorite   / Search   Esc Close"
+            : "F Favorite   H Hide   U Update git   Del Delete from OS   Shift+↑/↓ Sort in folder   Shift+←/→ Sort folders   N New folder   Enter Apply   E Aether   R Random favorite   / Search   Esc Close"
           color: root.muted
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -3083,6 +3204,130 @@ Item {
       }
 
       Rectangle {
+        visible: !!(svc && svc.updateOpen)
+        anchors.fill: parent
+        z: 38
+        color: Util.alpha(root.bg, 0.72)
+        MouseArea {
+          anchors.fill: parent
+          onClicked: if (svc && !svc.updateRunning) svc.closeGitUpdate()
+        }
+
+        Rectangle {
+          width: 480
+          height: 360
+          radius: Style.cornerRadius
+          color: root.bg
+          border.color: root.accent
+          border.width: 1
+          anchors.centerIn: parent
+          MouseArea { anchors.fill: parent; onClicked: { } }
+
+          ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: Style.space(16)
+            spacing: Style.space(10)
+
+            Text {
+              textFormat: Text.PlainText
+              text: (svc && svc.updateRunning) ? "Updating git themes" : "Git themes"
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              Layout.fillWidth: true
+              wrapMode: Text.WordWrap
+              text: {
+                if (!svc) return ""
+                if (svc.updateRunning && svc.updateTotal > 0)
+                  return "Pulling " + svc.updateRows.length + " of " + svc.updateTotal + "…"
+                if (svc.updateRunning) return "Finding git-installed themes…"
+                return Model.gitUpdateSummary(svc.updateRows)
+              }
+              color: root.muted
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            ListView {
+              Layout.fillWidth: true
+              Layout.fillHeight: true
+              clip: true
+              spacing: Style.space(6)
+              model: svc ? svc.updateRows : []
+              delegate: Column {
+                required property var modelData
+                width: ListView.view.width
+                spacing: 2
+                Text {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  elide: Text.ElideRight
+                  text: {
+                    var st = modelData.status
+                    var mark = st === "updated" ? "updated" : (st === "current" ? "current" : (st === "failed" ? "failed" : "updating"))
+                    return (modelData.name || modelData.slug) + " — " + mark
+                  }
+                  color: modelData.status === "failed" ? root.accent : root.fg
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                }
+                Text {
+                  textFormat: Text.PlainText
+                  visible: !!(modelData.detail)
+                  width: parent.width
+                  wrapMode: Text.WordWrap
+                  text: modelData.detail || ""
+                  color: root.muted
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+              }
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              visible: !!(svc && !svc.updateRunning && (!svc.updateRows || !svc.updateRows.length))
+              Layout.fillWidth: true
+              wrapMode: Text.WordWrap
+              text: "Only user clones with a .git folder are pulled (not stock, not a symlink). Header Update git themes works from catalog or schedule."
+              color: root.muted
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Row {
+              spacing: Style.space(8)
+              Rectangle {
+                visible: !!(svc && !svc.updateRunning)
+                width: closeUpLab.implicitWidth + Style.space(16)
+                height: Style.space(30)
+                radius: Style.cornerRadius
+                color: Util.alpha(root.accent, 0.28)
+                Text {
+                  textFormat: Text.PlainText
+                  id: closeUpLab
+                  anchors.centerIn: parent
+                  text: "Close"
+                  color: root.fg
+                  font.family: root.fontFamily
+                }
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: if (svc) svc.closeGitUpdate()
+                }
+              }
+            }
+          }
+        }
+      }
+
+      Rectangle {
         visible: root.confirmRemove
         anchors.fill: parent
         z: 30
@@ -3090,8 +3335,8 @@ Item {
         MouseArea { anchors.fill: parent; onClicked: root.confirmRemove = false }
 
         Rectangle {
-          width: 420
-          height: 160
+          width: 440
+          height: 220
           radius: Style.cornerRadius
           color: root.bg
           border.color: root.accent
@@ -3102,12 +3347,14 @@ Item {
           Column {
             anchors.centerIn: parent
             spacing: Style.space(12)
-            width: 380
+            width: 400
             Text {
               textFormat: Text.PlainText
               width: parent.width
               wrapMode: Text.WordWrap
-              text: root.selected ? ("Remove user theme “" + root.selected.name + "”? This deletes that theme from your user themes folder.") : "Remove this user theme from disk?"
+              text: root.selected
+                ? ("Delete “" + root.selected.name + "” from this computer? This removes your theme folder and extra wallpapers. Packaged stock themes are not deleted. This cannot be undone.")
+                : "Delete this user theme from disk? This cannot be undone."
               color: root.fg
               font.family: root.fontFamily
             }
@@ -3122,11 +3369,11 @@ Item {
                 MouseArea { anchors.fill: parent; onClicked: root.confirmRemove = false }
               }
               Rectangle {
-                width: 90
+                width: 120
                 height: Style.space(30)
                 radius: Style.cornerRadius
                 color: Util.alpha(root.accent, 0.28)
-                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Remove"; color: root.fg; font.family: root.fontFamily }
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Delete from OS"; color: root.fg; font.family: root.fontFamily }
                 MouseArea {
                   anchors.fill: parent
                   onClicked: {

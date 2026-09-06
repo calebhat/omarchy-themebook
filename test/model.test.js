@@ -3,7 +3,7 @@ const fs = require("fs")
 const path = require("path")
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
   .replace(/^\.pragma library\s*/, "")
-eval(src + "\nmodule.exports = { defaultConfig, normalizeConfig, flatten, clockPeriod, bumpHHMM, pruneConfig, toggleInList, moveInList, isValidSlug, isReservedSection, currentPeriod, sanitizeFolderName, isCollapsed, activeRule, themeSlugForBackground, moveFolderIds, parseTimeInput, formatTimeDisplay, formatHourMinute, hourIsPm, applyMeridiem, parseClockTime, pickerSections, fuzzyMatch, minutesOf, moveIdBefore, wallpaperCyclePaths, nextWallpaper, cycleFolderChoices, isReorderableSection, themeWallpaperPaths, cycleIntervalMs, cycleSlugs, syncThemeCycleState, activeWallpaperSpec, isScheduleActive, clearSchedule, scheduleActiveLabel, defaultWallpaper, applyDefaultPreviews, boundCatalog, foldersForSlug, addSlugToFolder, dropSlugFromFolder, replaceFolderThemes, setThemeFolders }")
+eval(src + "\nmodule.exports = { defaultConfig, normalizeConfig, flatten, clockPeriod, bumpHHMM, pruneConfig, dropThemeFromConfig, canDeleteFromOs, parseGitUpdateLine, gitUpdateSummary, hasGitThemes, toggleInList, moveInList, isValidSlug, isReservedSection, currentPeriod, sanitizeFolderName, isCollapsed, activeRule, themeSlugForBackground, moveFolderIds, parseTimeInput, formatTimeDisplay, formatHourMinute, hourIsPm, applyMeridiem, parseClockTime, pickerSections, fuzzyMatch, minutesOf, moveIdBefore, wallpaperCyclePaths, nextWallpaper, cycleFolderChoices, isReorderableSection, themeWallpaperPaths, cycleIntervalMs, cycleSlugs, syncThemeCycleState, activeWallpaperSpec, isScheduleActive, clearSchedule, scheduleActiveLabel, defaultWallpaper, applyDefaultPreviews, boundCatalog, foldersForSlug, addSlugToFolder, dropSlugFromFolder, replaceFolderThemes, setThemeFolders, colorKeys, normalizeHex, colorFor, paletteLines, paletteText }")
 
 const m = module.exports
 const cfg = m.normalizeConfig({
@@ -249,4 +249,41 @@ if (!freshPick.picker.includeStock || !freshPick.picker.includeUser) throw new E
 const keptOff = m.normalizeConfig({ picker: { includeStock: false, includeUser: false, defaultFolder: "favorites" } })
 if (keptOff.picker.includeStock || keptOff.picker.includeUser) throw new Error("keep picker includes off")
 if (keptOff.picker.defaultFolder !== "favorites") throw new Error("keep picker folder")
+if (m.normalizeHex("#89B4FA") !== "#89b4fa") throw new Error("hex lower")
+if (m.normalizeHex("aabbcc") !== "#aabbcc") throw new Error("hex hash")
+if (m.normalizeHex("#abc") !== "#abc") throw new Error("hex short")
+if (m.normalizeHex("not-a-color") !== "") throw new Error("hex reject")
+if (m.colorFor("") !== "transparent") throw new Error("colorFor empty")
+if (m.colorKeys().join() !== "accent,background,foreground,red,orange,yellow,green,cyan,blue,magenta")
+  throw new Error("color keys")
+const pal = m.paletteText({ accent: "#89B4FA", background: "1e1e2e", red: "nope", green: "" })
+if (pal !== "accent = \"#89b4fa\"\nbackground = \"#1e1e2e\"") throw new Error("palette text " + pal)
+if (m.paletteLines({}).length !== 0) throw new Error("empty palette")
+if (!m.canDeleteFromOs({ slug: "sakura-mochi", source: "user" }, "nord")) throw new Error("delete user")
+if (m.canDeleteFromOs({ slug: "nord", source: "stock" }, "sakura-mochi")) throw new Error("no delete stock")
+if (m.canDeleteFromOs({ slug: "sakura-mochi", source: "user" }, "sakura-mochi")) throw new Error("no delete current")
+const droppedTheme = m.dropThemeFromConfig({
+  favorites: ["sakura-mochi", "nord"],
+  recents: ["sakura-mochi"],
+  hidden: ["sakura-mochi"],
+  folders: [{ id: "dark", name: "Dark", themes: ["sakura-mochi", "nord"] }],
+  picker: { lastSlug: "sakura-mochi" },
+  defaultWallpapers: { "sakura-mochi": "/a.png", nord: "/b.png" },
+  schedule: { day: "sakura-mochi", night: "nord", rules: [{ theme: "sakura-mochi" }], sun: { day: "sakura-mochi", night: "nord" } },
+  themeCycle: { lastSlug: "sakura-mochi" }
+}, "sakura-mochi")
+if (droppedTheme.favorites.join() !== "nord") throw new Error("drop favorites")
+if (droppedTheme.folders[0].themes.join() !== "nord") throw new Error("drop folder")
+if (droppedTheme.picker.lastSlug !== "") throw new Error("drop picker")
+if (droppedTheme.defaultWallpapers["sakura-mochi"] || !droppedTheme.defaultWallpapers.nord) throw new Error("drop defaults")
+if (droppedTheme.schedule.day !== "" || droppedTheme.themeCycle.lastSlug !== "") throw new Error("drop schedule")
+if (m.parseGitUpdateLine("{not json")) throw new Error("bad json")
+if (m.parseGitUpdateLine(JSON.stringify({ event: "start", total: 2 })).total !== 2) throw new Error("start total")
+const upd = m.parseGitUpdateLine(JSON.stringify({ event: "theme", slug: "nord", status: "updated", detail: "Fast-forward" }))
+if (!upd || upd.slug !== "nord" || upd.status !== "updated") throw new Error("theme line")
+if (m.parseGitUpdateLine(JSON.stringify({ event: "theme", slug: "../x", status: "updated" }))) throw new Error("reject bad slug")
+if (!m.hasGitThemes([{ slug: "nord", git: true }]) || m.hasGitThemes([{ slug: "nord" }])) throw new Error("hasGit")
+if (m.gitUpdateSummary([]) !== "No git-installed user themes to update.") throw new Error("empty summary")
+if (m.gitUpdateSummary([{ status: "updated" }, { status: "current" }, { status: "failed" }]).indexOf("failed") < 0)
+  throw new Error("summary mix")
 console.log("model ok")
