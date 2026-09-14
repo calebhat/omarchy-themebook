@@ -7,7 +7,9 @@ set -euo pipefail
 
 MENU=$HOME/.config/omarchy/extensions/omarchy-menu.jsonc
 mkdir -p "$(dirname "$MENU")"
-ENTRY='  "style.theme": {"icon":"󰸌","label":"Theme","aliases":["theme","themes"],"action":"omarchy-shell themebook pick"}'
+# Fall back to Omarchy's picker if ThemeBook is disabled or gone, so a leftover
+# override cannot break Style > Theme / Super+Ctrl+Shift+Space.
+ENTRY='  "style.theme": {"icon":"󰸌","label":"Theme","aliases":["theme","themes"],"action":"omarchy-shell themebook pick || { theme=$(omarchy-theme-switcher); [[ -n $theme ]] && omarchy-theme-set \"$theme\"; }"}'
 
 strip_theme_override() {
   python3 - "$MENU" <<'PY'

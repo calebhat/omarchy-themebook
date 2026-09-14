@@ -21,7 +21,7 @@ themes
 
 ### Maintainer notes
 
-Full theme suite for installed Omarchy themes (organizer + scheduler, not extra-theme install, not a designer). Catalog with favorites, recents, folders, default wallpapers, preview-then-apply. Optional Theme menu checkbox replaces Super+Ctrl+Shift+Space with a stock-style carousel; off restores Omarchy’s picker. Scheduler: Timed Themes, sunrise/sunset, theme cycle, wallpaper cycle (one type at a time). Optional Aether. MIT. No sudo. No network. No setup script. Apps .desktop created only if missing. Theme menu writes style.theme in the user menu extension only while enabled.
+Full theme suite for installed Omarchy themes (organizer + scheduler, not extra-theme install, not a designer). Catalog with favorites, recents, folders, default wallpapers, preview-then-apply. Optional Theme menu checkbox replaces Super+Ctrl+Shift+Space with a stock-style carousel; off, disable, and remove restore Omarchy’s picker. Scheduler: Timed Themes, sunrise/sunset, theme cycle, wallpaper cycle (one type at a time). Optional Aether. MIT. No sudo. No network. No setup script. Apps .desktop created only if missing. Theme menu writes style.theme in the user menu extension only while enabled.
 
 ### Submission checklist
 

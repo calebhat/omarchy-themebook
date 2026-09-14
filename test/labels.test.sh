@@ -95,6 +95,18 @@ if ! grep -F -q -- 'function togglePicker()' "$root/Service.qml"; then
   echo "missing: picker toggle so pick IPC can dismiss exclusive-focus overlay" >&2
   exit 1
 fi
+if ! grep -F -q -- 'function restorePickerMenuNow()' "$root/Service.qml"; then
+  echo "missing: restore Style > Theme when the service unloads" >&2
+  exit 1
+fi
+if ! grep -F -q -- 'Component.onDestruction: root.restorePickerMenuNow()' "$root/Service.qml"; then
+  echo "missing: strip style.theme override on plugin disable/remove" >&2
+  exit 1
+fi
+if ! grep -F -q -- 'Quickshell.execDetached(["python3", "-c", root.restoreMenuPy, menu])' "$root/Service.qml"; then
+  echo "missing: unload restore must strip style.theme without the plugin script" >&2
+  exit 1
+fi
 if ! grep -F -q -- 'scriptPath("remove")' "$root/Service.qml"; then
   echo "missing: OS delete uses scripts/remove" >&2
   exit 1

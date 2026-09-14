@@ -58,7 +58,7 @@ omarchy restart shell
 
 On first start, if you do not already have one, ThemeBook copies its Apps launcher into `~/.local/share/applications/`. It never overwrites that file. It also installs `icon.png` as the Apps icon (`io.github.calebhat.themebook`).
 
-**Theme menu** is on by default for new installs. That writes a `style.theme` override in `~/.config/omarchy/extensions/omarchy-menu.jsonc` so Super+Ctrl+Shift+Space opens ThemeBook’s carousel. Turn **Theme menu** off in the catalog to remove that override and restore Omarchy’s picker. ThemeBook does not edit Hyprland or theme folders.
+**Theme menu** is on by default for new installs. That writes a `style.theme` override in `~/.config/omarchy/extensions/omarchy-menu.jsonc` so Super+Ctrl+Shift+Space opens ThemeBook’s carousel. Turn **Theme menu** off in the catalog to remove that override and restore Omarchy’s picker. Disabling or removing the plugin does the same restore as the service unloads. The override also falls back to Omarchy’s picker if ThemeBook is already gone. ThemeBook does not edit Hyprland or theme folders.
 
 Open the catalog from Apps (**ThemeBook**), Style > ThemeBook, or:
 
@@ -114,11 +114,11 @@ Local IPC (`omarchy-shell themebook …`) is the same user session as the shell.
 omarchy plugin remove io.github.calebhat.themebook --yes
 ```
 
-That does not delete your themes. Leftovers you can delete yourself:
+That does not delete your themes. Disable and remove strip ThemeBook’s `style.theme` override from `~/.config/omarchy/extensions/omarchy-menu.jsonc` as the service unloads (same as turning **Theme menu** off). Leftovers you can delete yourself:
 
 - `~/.local/share/applications/io.github.calebhat.themebook.desktop`
-- a `style.theme` override in `~/.config/omarchy/extensions/omarchy-menu.jsonc` if Theme menu was on (or turn Theme menu off before removing)
 - `~/.config/omarchy/themebook.json`
+- a `style.theme` override in `omarchy-menu.jsonc` only if you removed the plugin while `omarchy-shell` was not running (the leftover action still falls back to Omarchy’s picker)
 
 ## License and dependencies
 
@@ -138,6 +138,6 @@ Optional tools (already common on Omarchy, not installed by this plugin):
 
 - Applies themes with `omarchy theme set <slug>` as argv, never `bash -c`. Deletes user themes with `scripts/remove <slug>` (argv-only); the helper refuses the current theme, invalid slugs, and anything outside the user themes/backgrounds trees. It never writes under `/usr/share`. Git updates use `scripts/update-git` (argv-only, `GIT_TERMINAL_PROMPT=0`, 45s per theme); it only pulls real user dirs with a `.git` directory.
 - Preview and background paths must resolve under the real theme directory (symlink themes included). Directory symlinks under `backgrounds/` are not followed out of the tree. Catalog JSON is capped (256 themes, 48 backgrounds each, 1 MiB). The catalog helper runs under one 12s TERM / 2s KILL deadline; `find` is item-capped before sort. `themebook.json` is size-checked with `stat` before any bytes are copied into the shell (max 256 KiB). Folder and theme names render as plain text.
-- **Theme menu** edits `omarchy-menu.jsonc` only while that checkbox is on; turning it off deletes the override.
+- **Theme menu** edits `omarchy-menu.jsonc` only while that checkbox is on; turning it off, disabling the plugin, or removing it deletes the override. The override action falls back to `omarchy-theme-switcher` if the ThemeBook IPC target is gone.
 - The Apps `.desktop` file is created only if it does not already exist.
 - No network, no sudo, no pkexec, no pip, no setup script.

@@ -480,6 +480,16 @@ Item {
     pickerMenuProc.running = true
   }
 
+  // Same strip as scripts/set-default-picker restore. argv python so this still
+  // runs after plugin-remove deletes the checkout (disable destroys the service
+  // first, but the script file may already be gone).
+  readonly property string restoreMenuPy: "import pathlib,sys\npath=pathlib.Path(sys.argv[1])\nif not path.exists(): raise SystemExit(0)\nout=[]\nfor line in path.read_text().splitlines(True):\n    if line.lstrip().startswith('\"style.theme\"'): continue\n    out.append(line)\npath.write_text(''.join(out).replace(',\\n}','\\n}'))"
+
+  function restorePickerMenuNow() {
+    var menu = root.home + "/.config/omarchy/extensions/omarchy-menu.jsonc"
+    Quickshell.execDetached(["python3", "-c", root.restoreMenuPy, menu])
+  }
+
   function setPickerAsked(yes) {
     var next = Model.normalizeConfig(root.config)
     next.picker.asked = true
@@ -1267,4 +1277,6 @@ Item {
     root.installLaunchers()
     Qt.callLater(function() { root.tickSchedule() })
   }
+
+  Component.onDestruction: root.restorePickerMenuNow()
 }

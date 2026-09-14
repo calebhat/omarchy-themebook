@@ -23,4 +23,4 @@ Commit as `calebhat <97716470+calebhat@users.noreply.github.com>`.
 
 Marketplace: one `[Plugin]: ThemeBook` issue. Edit that issue to revalidate. Do not open a duplicate.
 
-Do not restore automatic edits to `omarchy-menu.jsonc`. The Apps launcher is created only when that desktop file is missing.
+Do not auto-insert a Style > ThemeBook row in `omarchy-menu.jsonc`. Theme menu may override `style.theme` only while that checkbox is on, and must strip that override when the checkbox is off or the service unloads. The Apps launcher is created only when that desktop file is missing.
