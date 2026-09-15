@@ -966,7 +966,7 @@ Item {
               textFormat: Text.PlainText
               id: updateGitLab
               anchors.centerIn: parent
-              text: (svc && svc.updateRunning) ? "Updating…" : "Update git themes"
+              text: (svc && svc.updateRunning) ? "Checking…" : "Check git themes"
               color: root.fg
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1848,7 +1848,7 @@ Item {
                     { id: "hide", label: "Hide" },
                     { id: "show", label: "Show" },
                     { id: "random", label: "Random favorite" },
-                    { id: "update", label: "Update git themes" },
+                    { id: "update", label: "Check git themes" },
                     { id: "remove", label: "Delete from OS" },
                     { id: "apply", label: "Apply theme" }
                   ]
@@ -2791,7 +2791,7 @@ Item {
           Layout.fillWidth: true
           text: root.mainView === "schedule"
             ? "Esc catalog   Tab mode   C 12/24   ↑/↓ row   ←/→ field   Enter activate   A add time"
-            : "F Favorite   H Hide   U Update git   Del Delete from OS   Shift+↑/↓ Sort in folder   Shift+←/→ Sort folders   N New folder   Enter Apply   E Aether   R Random favorite   / Search   Esc Close"
+            : "F Favorite   H Hide   U Check git   Del Delete from OS   Shift+↑/↓ Sort in folder   Shift+←/→ Sort folders   N New folder   Enter Apply   E Aether   R Random favorite   / Search   Esc Close"
           color: root.muted
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -3230,7 +3230,7 @@ Item {
 
             Text {
               textFormat: Text.PlainText
-              text: (svc && svc.updateRunning) ? "Updating git themes" : "Git themes"
+              text: (svc && svc.updateRunning) ? "Checking git themes" : "Git themes"
               color: root.fg
               font.family: root.fontFamily
               font.pixelSize: Style.font.title
@@ -3244,7 +3244,7 @@ Item {
               text: {
                 if (!svc) return ""
                 if (svc.updateRunning && svc.updateTotal > 0)
-                  return "Pulling " + svc.updateRows.length + " of " + svc.updateTotal + "…"
+                  return "Checking " + svc.updateRows.length + " of " + svc.updateTotal + "…"
                 if (svc.updateRunning) return "Finding git-installed themes…"
                 return Model.gitUpdateSummary(svc.updateRows)
               }
@@ -3269,7 +3269,7 @@ Item {
                   elide: Text.ElideRight
                   text: {
                     var st = modelData.status
-                    var mark = st === "updated" ? "updated" : (st === "current" ? "current" : (st === "failed" ? "failed" : "updating"))
+                    var mark = st === "available" ? "available" : (st === "current" ? "current" : (st === "failed" ? "failed" : "checking"))
                     return (modelData.name || modelData.slug) + " — " + mark
                   }
                   color: modelData.status === "failed" ? root.accent : root.fg
@@ -3291,10 +3291,10 @@ Item {
 
             Text {
               textFormat: Text.PlainText
-              visible: !!(svc && !svc.updateRunning && (!svc.updateRows || !svc.updateRows.length))
+              visible: !!(svc && !svc.updateRunning)
               Layout.fillWidth: true
               wrapMode: Text.WordWrap
-              text: "Only user clones with a .git folder are pulled (not stock, not a symlink). Header Update git themes works from catalog or schedule."
+              text: "Compares local HEAD to origin on user clones (not stock, not a symlink). Never merges or checks out remote theme content."
               color: root.muted
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption

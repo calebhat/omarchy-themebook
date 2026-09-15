@@ -8,7 +8,7 @@ ThemeBook is not a theme installer and not a designer. It is the place you live 
 
 Plugin id: `io.github.calebhat.themebook`. MIT. Independent community plugin. Not affiliated with Omarchy or 37signals.
 
-No sudo or pkexec is required. No network calls. No extra packages.
+No sudo or pkexec is required. No extra packages. The only network use is an optional git fetch when you check git themes; ThemeBook never checks out what it fetched.
 
 <p align="center"><img src="preview.png" alt="ThemeBook catalog, schedule, and theme picker" width="900"></p>
 
@@ -31,7 +31,7 @@ No sudo or pkexec is required. No network calls. No extra packages.
 - **Backgrounds** — click a wallpaper in the strip to preview it in the panel (it does not change the live theme). **Apply theme** uses the wallpaper you are previewing, or the starred **default** if you have not picked one. Star a default for apply and picker/catalog previews, including schedules.
 - **Hide** themes without uninstalling; **Hidden** filter lists them. **Show** replaces Hide when the theme is already hidden. **Unfavorite** when it is already a favorite.
 - **Delete from OS** user themes (never packaged stock, never the active theme) with a confirmation dialog. This deletes `~/.config/omarchy/themes/<slug>` and extra wallpapers in `~/.config/omarchy/backgrounds/<slug>`. Packaged copies under `/usr/share/omarchy/themes` stay. Delete or the **Delete from OS** button.
-- **Update git themes** is always in the header (catalog and schedule). It pulls every user git clone. A progress overlay lists each theme and whether it updated, was already current, or failed. `U` opens it. The preview-pane button still appears on a git-backed selection.
+- **Check git themes** is always in the header (catalog and schedule). It fetches origin to compare SHAs on every user git clone and never merges, resets, or checks out. A progress overlay lists each theme as current, update available, or failed. `U` opens it. The preview-pane button still appears on a git-backed selection. Applying an upstream theme remains Omarchy’s `omarchy theme update`, not this plugin.
 - **Edit in Aether** (optional) opens the Aether GUI with the theme wallpaper loaded for editing. It does not apply the theme through Aether.
 - **Theme menu** (checkbox, on for new installs) can replace Super+Ctrl+Shift+Space / Style > Theme with ThemeBook’s enhanced stock-style carousel. Toggle off to restore Omarchy’s picker.
 - **Carousel picker** — skewed previews like stock Omarchy, folder tiles above, type-to-filter (folders and themes independently), ↑/↓ between rows, ←/→ to move, Esc clears filter then closes. New installs open **All**, with Stock and User included (Favorites is still empty until you star themes). Remembers last folder, theme, and whether focus was on folders or themes. Open with `omarchy-shell themebook pick`.
@@ -88,7 +88,7 @@ Catalog (also printed at the bottom of that view):
 | `j` / `k` or ↑ / ↓ | Move selection |
 | `F` | Favorite |
 | `H` | Hide |
-| `U` | Update git themes |
+| `U` | Check git themes |
 | `Delete` | Delete from OS (user themes only) |
 | `Shift+↑/↓` | Sort inside the current folder or favorites |
 | `Shift+←/→` | Reorder folders |
@@ -104,7 +104,7 @@ Picker: ↑ folders · ↓ themes · ←/→ move · type to filter · `Enter` a
 
 ## Config
 
-Stored at `~/.config/omarchy/themebook.json`: favorites, hidden slugs, folders, recents, collapsed sections, `sectionOrder`, picker settings (including Theme menu / which folders are in the carousel), default wallpapers, clock 12/24, timed / sunrise schedule, **theme cycle** (folder, minutes, nested wallpaper), and **wallpaper cycle** (minutes). Theme directories are never written except through `omarchy theme set` / `bg set` / `remove` / `update`.
+Stored at `~/.config/omarchy/themebook.json`: favorites, hidden slugs, folders, recents, collapsed sections, `sectionOrder`, picker settings (including Theme menu / which folders are in the carousel), default wallpapers, clock 12/24, timed / sunrise schedule, **theme cycle** (folder, minutes, nested wallpaper), and **wallpaper cycle** (minutes). Theme directories are never written except through `omarchy theme set` / `bg set` / `remove`. Git check fetches into `.git` only.
 
 Local IPC (`omarchy-shell themebook …`) is the same user session as the shell. It only accepts installed theme slugs.
 
@@ -136,8 +136,8 @@ Optional tools (already common on Omarchy, not installed by this plugin):
 
 ## Security notes
 
-- Applies themes with `omarchy theme set <slug>` as argv, never `bash -c`. Deletes user themes with `scripts/remove <slug>` (argv-only); the helper refuses the current theme, invalid slugs, and anything outside the user themes/backgrounds trees. It never writes under `/usr/share`. Git updates use `scripts/update-git` (argv-only, `GIT_TERMINAL_PROMPT=0`, 45s per theme); it only pulls real user dirs with a `.git` directory.
+- Applies themes with `omarchy theme set <slug>` as argv, never `bash -c`. Deletes user themes with `scripts/remove <slug>` (argv-only); the helper refuses the current theme, invalid slugs, and anything outside the user themes/backgrounds trees. It never writes under `/usr/share`. Git checks use `scripts/update-git` (argv-only, `GIT_TERMINAL_PROMPT=0`, `core.hooksPath=/dev/null`, 45s per theme). It only fetches `origin` on real user dirs with a `.git` directory, compares HEAD to `@{upstream}`, and never pull/merge/checkout. Origin URLs that name a transport helper or a non-git scheme are refused.
 - Preview and background paths must resolve under the real theme directory (symlink themes included). Directory symlinks under `backgrounds/` are not followed out of the tree. Catalog JSON is capped (256 themes, 48 backgrounds each, 1 MiB). The catalog helper runs under one 12s TERM / 2s KILL deadline; `find` is item-capped before sort. `themebook.json` is size-checked with `stat` before any bytes are copied into the shell (max 256 KiB). Folder and theme names render as plain text.
 - **Theme menu** edits `omarchy-menu.jsonc` only while that checkbox is on; turning it off, disabling the plugin, or removing it deletes the override. The override action falls back to `omarchy-theme-switcher` if the ThemeBook IPC target is gone.
 - The Apps `.desktop` file is created only if it does not already exist.
-- No network, no sudo, no pkexec, no pip, no setup script.
+- No sudo, no pkexec, no pip, no setup script. Git check may fetch origin; it does not apply fetched trees.

@@ -1,5 +1,7 @@
 #!/bin/bash
-# Pull user-installed git themes. JSON lines on stdout for a progress overlay.
+# Compare local HEAD to origin for user-installed git themes.
+# JSON lines on stdout for a progress overlay.
+# Never pull, merge, reset, or checkout: fetched objects stay in .git.
 # Same extras rule as omarchy-theme-extras: real dirs with a .git directory.
 
 set -euo pipefail
@@ -13,6 +15,38 @@ export GIT_TERMINAL_PROMPT=0
 MAX_THEMES=256
 MAX_DETAIL=240
 USER_THEMES=$HOME/.config/omarchy/themes
+
+GIT_SAFE=(
+  -c core.hooksPath=/dev/null
+  -c fetch.recurseSubmodules=false
+  -c transfer.fsckObjects=true
+)
+
+git_safe() {
+  git "${GIT_SAFE[@]}" "$@"
+}
+
+fetch_origin() {
+  local theme=$1
+  if command -v timeout >/dev/null 2>&1; then
+    timeout --signal=TERM --kill-after=2s 45s git "${GIT_SAFE[@]}" -C "$theme" fetch --no-tags --recurse-submodules=no -- origin
+  else
+    git_safe -C "$theme" fetch --no-tags --recurse-submodules=no -- origin
+  fi
+}
+
+origin_ok() {
+  local url=$1
+  [[ -n $url && $url != *$'\n'* && $url != *$'\r'* ]] || return 1
+  [[ $url != -* ]] || return 1
+  [[ $url != *::* ]] || return 1
+  if [[ $url =~ ^([A-Za-z0-9][A-Za-z0-9+.-]*):// ]]; then
+    local scheme=${BASH_REMATCH[1]}
+    [[ $scheme == ssh || $scheme == git || $scheme == git+ssh || $scheme == ssh+git || $scheme == http || $scheme == https ]]
+    return
+  fi
+  return 0
+}
 
 title_case() {
   sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g' <<<"$1"
@@ -48,6 +82,11 @@ clip() {
   printf '%s' "$s"
 }
 
+short_sha() {
+  local sha=$1
+  printf '%s' "${sha:0:12}"
+}
+
 shopt -s extglob
 
 if [[ ! -d $USER_THEMES ]]; then
@@ -74,27 +113,51 @@ fi
 failed=0
 for theme in "${themes[@]}"; do
   slug=${theme##*/}
-  emit_theme "$slug" updating ""
+  emit_theme "$slug" checking ""
+  url=""
+  url=$(git_safe -C "$theme" remote get-url origin 2>/dev/null) || url=""
+  if ! origin_ok "$url"; then
+    failed=1
+    emit_theme "$slug" failed "origin URL is not a git repository"
+    continue
+  fi
+  local_sha=""
+  local_sha=$(git_safe -C "$theme" rev-parse HEAD 2>/dev/null) || local_sha=""
+  if [[ ! $local_sha =~ ^[0-9a-f]{40}$ ]]; then
+    failed=1
+    emit_theme "$slug" failed "no local HEAD"
+    continue
+  fi
+  if ! git_safe -C "$theme" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1; then
+    failed=1
+    emit_theme "$slug" failed "no upstream branch"
+    continue
+  fi
   st=0
   out=""
-  if command -v timeout >/dev/null 2>&1; then
-    out=$(timeout --signal=TERM --kill-after=2s 45s git -C "$theme" pull 2>&1) || st=$?
-  else
-    out=$(git -C "$theme" pull 2>&1) || st=$?
-  fi
-  detail=$(clip "$out")
-  if (( st == 0 )); then
-    if [[ ${out,,} == *already\ up\ to\ date* ]]; then
-      emit_theme "$slug" current "$detail"
-    else
-      emit_theme "$slug" updated "$detail"
-    fi
-  elif (( st == 124 || st == 137 )); then
+  out=$(fetch_origin "$theme" 2>&1) || st=$?
+  if (( st == 124 || st == 137 )); then
     failed=1
     emit_theme "$slug" failed "timed out"
-  else
+    continue
+  fi
+  if (( st != 0 )); then
     failed=1
-    emit_theme "$slug" failed "${detail:-git pull failed}"
+    detail=$(clip "$out")
+    emit_theme "$slug" failed "${detail:-git fetch failed}"
+    continue
+  fi
+  remote_sha=""
+  remote_sha=$(git_safe -C "$theme" rev-parse '@{upstream}' 2>/dev/null) || remote_sha=""
+  if [[ ! $remote_sha =~ ^[0-9a-f]{40}$ ]]; then
+    failed=1
+    emit_theme "$slug" failed "no upstream SHA"
+    continue
+  fi
+  if [[ $local_sha == "$remote_sha" ]]; then
+    emit_theme "$slug" current "HEAD $(short_sha "$local_sha")"
+  else
+    emit_theme "$slug" available "HEAD $(short_sha "$local_sha") origin $(short_sha "$remote_sha")"
   fi
 done
 

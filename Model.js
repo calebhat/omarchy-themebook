@@ -99,7 +99,7 @@ function parseGitUpdateLine(line) {
     var slug = String(o.slug || "")
     if (!isValidSlug(slug)) return null
     var status = String(o.status || "")
-    if (status !== "updating" && status !== "updated" && status !== "current" && status !== "failed")
+    if (status !== "checking" && status !== "available" && status !== "current" && status !== "failed")
       return null
     return {
       event: "theme",
@@ -114,17 +114,17 @@ function parseGitUpdateLine(line) {
 
 function gitUpdateSummary(rows) {
   var list = rows || []
-  var updated = 0
+  var available = 0
   var current = 0
   var failed = 0
   for (var i = 0; i < list.length; i++) {
-    if (list[i].status === "updated") updated++
+    if (list[i].status === "available") available++
     else if (list[i].status === "current") current++
     else if (list[i].status === "failed") failed++
   }
-  if (!list.length) return "No git-installed user themes to update."
+  if (!list.length) return "No git-installed user themes to check."
   var parts = []
-  if (updated) parts.push(updated + (updated === 1 ? " updated" : " updated"))
+  if (available) parts.push(available + (available === 1 ? " update available" : " updates available"))
   if (current) parts.push(current + " already current")
   if (failed) parts.push(failed + (failed === 1 ? " failed" : " failed"))
   if (!parts.length) return "Checking git themes…"
