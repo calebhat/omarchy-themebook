@@ -6,6 +6,7 @@ import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as OmarchyTheme
 import "Model.js" as Model
 
 Item {
@@ -23,11 +24,12 @@ Item {
   property var imageArray: []
   property bool layoutSettled: false
 
-  readonly property color dimColor: Color.background
-  readonly property color foreground: Color.imagePicker.text
-  readonly property color scrim: Color.imagePicker.scrim
-  readonly property color selectedBorder: Color.imagePicker.selectedBorder
-  readonly property color unselectedBorder: Color.imagePicker.unselectedBorder
+  readonly property color dimColor: OmarchyTheme.Color.background
+  readonly property color foreground: OmarchyTheme.Color.imagePicker.text
+  // Current Omarchy pickers have no backdrop; retain custom scrims on older shells.
+  readonly property color scrim: OmarchyTheme.Color.imagePicker.scrim ?? "transparent"
+  readonly property color selectedBorder: OmarchyTheme.Color.imagePicker.selectedBorder
+  readonly property color unselectedBorder: OmarchyTheme.Color.imagePicker.unselectedBorder
   property int expandedWidth: 768
   property int expandedHeight: 475
   property int sliceWidth: 108
@@ -464,11 +466,11 @@ Item {
                 width: Math.max(Style.space(88), folderLab.implicitWidth + Style.space(20))
                 radius: Style.cornerRadius
                 color: current
-                  ? Util.alpha(Color.accent, rowFocus ? 0.42 : 0.22)
+                  ? Util.alpha(OmarchyTheme.Color.accent, rowFocus ? 0.42 : 0.22)
                   : Util.alpha(root.foreground, rowFocus ? 0.12 : 0.06)
                 border.width: current && rowFocus ? 2 : 1
                 border.color: current
-                  ? Color.accent
+                  ? OmarchyTheme.Color.accent
                   : Util.alpha(root.foreground, rowFocus ? 0.28 : 0.12)
                 Text {
                   textFormat: Text.PlainText
