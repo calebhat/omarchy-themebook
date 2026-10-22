@@ -5,6 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import qs.Commons
+import qs.Commons as OmarchyTheme
 import qs.Ui
 import "Model.js" as Model
 
@@ -109,10 +110,10 @@ Item {
     }
     return out
   }
-  readonly property color fg: Color.foreground
-  readonly property color bg: Color.background
-  readonly property color accent: Color.accent
-  readonly property color muted: Util.alpha(Color.foreground, 0.62)
+  readonly property color fg: OmarchyTheme.Color.foreground
+  readonly property color bg: OmarchyTheme.Color.background
+  readonly property color accent: OmarchyTheme.Color.accent
+  readonly property color muted: Util.alpha(OmarchyTheme.Color.foreground, 0.62)
   readonly property string fontFamily: Style.font.family
   readonly property bool opened: window.visible
 
