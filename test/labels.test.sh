@@ -25,7 +25,14 @@ need=(
   'text: "Save folders"'
   'label: "Random favorite"'
   'label: "Check git themes"'
+  'label: "Rename"'
   'label: "Delete from OS"'
+  '"Rename theme"'
+  'text: "Copy to theme"'
+  'text: "Move to theme"'
+  'text: "Delete background"'
+  '"Move background to"'
+  '"Copy background to"'
   'label: "Apply theme"'
   'label: "Sunrise / sunset"'
   'label: "Timed Themes"'
@@ -45,7 +52,13 @@ need=(
   'id: scheduleOnBadge'
   'id: themeListCol'
   'text: "Also cycle wallpapers"'
-  'text: "Backgrounds — click to preview here. Star one as default for apply and picker."'
+  'text: "Backgrounds — click to preview here. Apps returns to the theme preview. Star a wallpaper as default for apply and picker."'
+  'text: "Apps"'
+  'text: "Live"'
+  'text: "Cycle themes"'
+  'text: "Choose target"'
+  'text: "Select a folder, or open it and pick one theme."'
+  'text: "Select"'
   'text: "Copy palette"'
   'Click a color to copy its hex'
   '["wl-copy", "--", value]'
@@ -55,7 +68,7 @@ need=(
   'F Favorite   H Hide   U Check git   Del Delete from OS   Shift+↑/↓ Sort in folder'
   'Esc catalog   Tab mode   C 12/24   ↑/↓ row   ←/→ field   Enter activate   A add time'
   'onAccepted: root.submitPrompt()'
-  'if (root.folderMenuOpen || root.promptKind || root.confirmRemove) return'
+  'if (root.folderMenuOpen || root.promptKind || root.confirmRemove || root.confirmBg || root.bgDestMode) return'
 )
 for s in "${need[@]}"; do
   if ! grep -F -q -- "$s" "$qml"; then
@@ -100,11 +113,11 @@ if ! grep -F -q -- 'function restorePickerMenuNow()' "$root/Service.qml"; then
   exit 1
 fi
 if ! grep -F -q -- 'Component.onDestruction: root.restorePickerMenuNow()' "$root/Service.qml"; then
-  echo "missing: strip style.theme override on plugin disable/remove" >&2
+  echo "missing: strip the theme override on plugin disable/remove" >&2
   exit 1
 fi
 if ! grep -F -q -- 'Quickshell.execDetached(["python3", "-c", root.restoreMenuPy, menu])' "$root/Service.qml"; then
-  echo "missing: unload restore must strip style.theme without the plugin script" >&2
+  echo "missing: unload restore must strip the theme override without the plugin script" >&2
   exit 1
 fi
 if ! grep -F -q -- 'scriptPath("remove")' "$root/Service.qml"; then

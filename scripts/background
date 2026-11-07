@@ -1,0 +1,194 @@
+#!/bin/bash
+# Copy, move, or delete one theme background.
+# Stock files can be copied. Move and delete only touch user-owned files.
+# Never writes under /usr/share.
+
+set -euo pipefail
+
+cmd=${1-}
+user_root=$HOME/.config/omarchy/themes
+extra_root=$HOME/.config/omarchy/backgrounds
+stock_root=${OMARCHY_PATH:-/usr/share/omarchy}/themes
+bg_link=$HOME/.local/state/omarchy/current/background
+max_bytes=268435456
+
+emit() {
+  local ok=$1 err=$2 path=${3-}
+  jq -cn \
+    --argjson ok "$ok" \
+    --arg error "$err" \
+    --arg path "$path" \
+    '{ok:$ok,error:$error,path:$path}'
+}
+
+valid_slug() {
+  [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $1 != *..* ]]
+}
+
+fail() {
+  emit false "$1"
+  exit 1
+}
+
+path_allowed() {
+  local file=$1 slug=$2 real theme_real
+  real=$(realpath -e "$file" 2>/dev/null) || return 1
+  theme_real=$(realpath -e "$user_root/$slug" 2>/dev/null || true)
+  if [[ -n $theme_real && $real == "$theme_real/"* ]]; then
+    return 0
+  fi
+  theme_real=$(realpath -e "$stock_root/$slug" 2>/dev/null || true)
+  if [[ -n $theme_real && $real == "$theme_real/"* ]]; then
+    return 0
+  fi
+  [[ $real == "$HOME/.config/omarchy/backgrounds/$slug/"* ]]
+}
+
+owned_file() {
+  local real=$1 slug=$2 theme_real extra_real stock_real
+  [[ -n $real && -f $real ]] || return 1
+  stock_real=$(realpath -e "$stock_root" 2>/dev/null || true)
+  if [[ -n $stock_real && $real == "$stock_real/"* ]]; then
+    return 1
+  fi
+  extra_real=$(realpath -e "$extra_root/$slug" 2>/dev/null || true)
+  if [[ -n $extra_real && $real == "$extra_real/"* ]]; then
+    return 0
+  fi
+  theme_real=$(realpath -e "$user_root/$slug" 2>/dev/null || true)
+  [[ -n $theme_real && $real == "$theme_real/backgrounds/"* ]]
+}
+
+source_file() {
+  local slug=$1 file=$2 real size
+  [[ -n $file && $file != *..* && ${#file} -le 512 ]] || return 1
+  real=$(realpath -e "$file" 2>/dev/null) || return 1
+  [[ -f $real ]] || return 1
+  size=$(stat -c%s "$real" 2>/dev/null || echo 0)
+  if (( size <= 0 || size > max_bytes )); then
+    return 1
+  fi
+  path_allowed "$real" "$slug" || return 1
+  printf '%s\n' "$real"
+}
+
+current_bg() {
+  readlink -f "$bg_link" 2>/dev/null || true
+}
+
+clean_name() {
+  local base=${1##*/}
+  base=${base,,}
+  base=$(sed -E 's/[^a-z0-9._-]+/-/g; s/-+/-/g; s/^[-.]+//; s/[-.]+$//' <<<"$base")
+  [[ $base =~ ^[a-z0-9][a-z0-9._-]*\.(jpg|jpeg|png|gif|bmp|webp|mp4|m4v|mov|webm|mkv|avi)$ ]] || return 1
+  (( ${#base} <= 120 )) || return 1
+  printf '%s\n' "$base"
+}
+
+unique_dest() {
+  local dir=$1 name=$2 stem ext candidate n
+  stem=${name%.*}
+  ext=${name##*.}
+  candidate=$dir/$name
+  n=2
+  while [[ -e $candidate || -L $candidate ]]; do
+    candidate=$dir/${stem}-${n}.$ext
+    n=$((n + 1))
+    if (( n > 50 )); then
+      return 1
+    fi
+  done
+  printf '%s\n' "$candidate"
+}
+
+# Print the real directory a new file may be written into.
+dest_dir() {
+  local slug=$1 entry dest parent_real bg_real extra_real
+  entry=$user_root/$slug
+  if [[ -e $entry || -L $entry ]]; then
+    [[ -d $entry ]] || return 1
+    if [[ -L $entry/backgrounds ]] || { [[ -e $entry/backgrounds ]] && [[ ! -d $entry/backgrounds ]]; }; then
+      return 1
+    fi
+    mkdir -p "$entry/backgrounds"
+    dest=$entry/backgrounds
+    parent_real=$(realpath -e "$entry") || return 1
+    bg_real=$(realpath -e "$dest") || return 1
+    [[ $bg_real == "$parent_real/backgrounds" ]] || return 1
+    printf '%s\n' "$bg_real"
+    return 0
+  fi
+  [[ -d $stock_root/$slug ]] || return 1
+  if [[ -L $extra_root/$slug ]]; then
+    return 1
+  fi
+  mkdir -p "$extra_root/$slug"
+  dest=$extra_root/$slug
+  extra_real=$(realpath -e "$extra_root") || return 1
+  bg_real=$(realpath -e "$dest") || return 1
+  [[ $bg_real == "$extra_real/$slug" ]] || return 1
+  printf '%s\n' "$bg_real"
+}
+
+copy_into() {
+  local src=$1 slug=$2 dir name dest dest_real
+  dir=$(dest_dir "$slug") || return 1
+  name=$(clean_name "$src") || return 1
+  dest=$(unique_dest "$dir" "$name") || return 1
+  cp -- "$src" "$dest"
+  dest_real=$(realpath -e "$dest") || return 1
+  [[ $dest_real == "$dir/"* ]] || return 1
+  printf '%s\n' "$dest_real"
+}
+
+delete_owned() {
+  local slug=$1 real=$2
+  owned_file "$real" "$slug" || return 1
+  [[ $real != "$(current_bg)" ]] || return 2
+  rm -f -- "$real"
+}
+
+case $cmd in
+  delete)
+    slug=${2-}
+    file=${3-}
+    valid_slug "$slug" || fail invalid-slug
+    real=$(source_file "$slug" "$file") || fail missing
+    if ! owned_file "$real" "$slug"; then
+      fail not-owned
+    fi
+    if [[ $real == "$(current_bg)" ]]; then
+      fail current
+    fi
+    delete_owned "$slug" "$real" || fail failed
+    emit true "" ""
+    ;;
+  copy|move)
+    from=${2-}
+    file=${3-}
+    to=${4-}
+    valid_slug "$from" || fail invalid-slug
+    valid_slug "$to" || fail invalid-slug
+    if [[ $cmd == move && $from == "$to" ]]; then
+      fail same
+    fi
+    real=$(source_file "$from" "$file") || fail missing
+    if [[ $cmd == move ]] && ! owned_file "$real" "$from"; then
+      fail not-owned
+    fi
+    copied=$(copy_into "$real" "$to") || fail dest
+    if [[ $cmd == move ]]; then
+      if [[ $real == "$(current_bg)" ]]; then
+        ln -nsf "$copied" "$bg_link"
+      fi
+      if ! delete_owned "$from" "$real"; then
+        emit false failed "$copied"
+        exit 1
+      fi
+    fi
+    emit true "" "$copied"
+    ;;
+  *)
+    fail usage
+    ;;
+esac

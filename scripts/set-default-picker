@@ -1,15 +1,15 @@
 #!/bin/bash
-# Override or restore Style > Theme in the user menu extension.
-# Stock Style > Theme lives in Omarchy's default menu; this file only holds
-# overrides, so removing style.theme restores the carousel.
+# Override or restore Appearance > Theme in the user menu extension.
+# Omarchy 4.5 renamed Style to Appearance (id appearance.theme, alias style).
+# This file only holds overrides, so removing appearance.theme restores the carousel.
 
 set -euo pipefail
 
 MENU=$HOME/.config/omarchy/extensions/omarchy-menu.jsonc
 mkdir -p "$(dirname "$MENU")"
 # Fall back to Omarchy's picker if ThemeBook is disabled or gone, so a leftover
-# override cannot break Style > Theme / Super+Ctrl+Shift+Space.
-ENTRY='  "style.theme": {"icon":"󰸌","label":"Theme","aliases":["theme","themes"],"action":"omarchy-shell themebook pick || { theme=$(omarchy-theme-switcher); [[ -n $theme ]] && omarchy-theme-set \"$theme\"; }"}'
+# override cannot break Appearance > Theme / Super+Ctrl+T.
+ENTRY='  "appearance.theme": {"icon":"󰸌","label":"Theme","aliases":["theme","themes"],"action":"omarchy-shell themebook pick || omarchy-shell shell summon omarchy.image-picker '"'"'{\"source\":\"themes\"}'"'"'"}'
 
 strip_theme_override() {
   python3 - "$MENU" <<'PY'
@@ -21,7 +21,10 @@ lines = path.read_text().splitlines(True)
 out = []
 for line in lines:
     stripped = line.lstrip()
-    if stripped.startswith('"style.theme"'):
+    if stripped.startswith('"style.theme"') or stripped.startswith('"appearance.theme"'):
+        continue
+    if stripped.startswith('"style.themebook"'):
+        out.append(line.replace('"style.themebook"', '"appearance.themebook"', 1))
         continue
     out.append(line)
 text = "".join(out).replace(",\n}", "\n}")

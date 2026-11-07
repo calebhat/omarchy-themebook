@@ -1,0 +1,141 @@
+#!/bin/bash
+# Rename a user theme folder and its extra wallpapers. Never touches stock.
+
+set -euo pipefail
+
+from=${1-}
+to=${2-}
+
+user_root=$HOME/.config/omarchy/themes
+extra_root=$HOME/.config/omarchy/backgrounds
+name_file=$HOME/.local/state/omarchy/current/theme.name
+bg_link=$HOME/.local/state/omarchy/current/background
+state_dir=$HOME/.local/state/omarchy/theme-backgrounds
+
+rewrite_from=()
+rewrite_to=()
+
+emit() {
+  local ok=$1 err=$2 bg=${3-}
+  local rewrites='[]'
+  local i
+  for i in "${!rewrite_from[@]}"; do
+    rewrites=$(jq -cn --argjson cur "$rewrites" --arg from "${rewrite_from[$i]}" --arg to "${rewrite_to[$i]}" \
+      '$cur + [{from:$from,to:$to}]')
+  done
+  jq -cn \
+    --argjson ok "$ok" \
+    --arg error "$err" \
+    --arg from "$from" \
+    --arg to "$to" \
+    --arg background "$bg" \
+    --argjson rewrites "$rewrites" \
+    '{ok:$ok,error:$error,from:$from,to:$to,background:$background,rewrites:$rewrites}'
+}
+
+valid_slug() {
+  [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $1 != *..* ]]
+}
+
+remember_rewrite() {
+  [[ -n $1 && -n $2 && $1 != "$2" ]] || return 0
+  rewrite_from+=("$1")
+  rewrite_to+=("$2")
+}
+
+apply_rewrite() {
+  local path=$1 i from_p to_p
+  for i in "${!rewrite_from[@]}"; do
+    from_p=${rewrite_from[$i]}
+    to_p=${rewrite_to[$i]}
+    if [[ $path == "$from_p" || $path == "$from_p"/* ]]; then
+      printf '%s%s\n' "$to_p" "${path#"$from_p"}"
+      return 0
+    fi
+  done
+  printf '%s\n' "$path"
+}
+
+if ! valid_slug "$from" || ! valid_slug "$to"; then
+  emit false invalid-slug
+  exit 1
+fi
+if [[ $from == "$to" ]]; then
+  emit false same
+  exit 1
+fi
+
+src=$user_root/$from
+dest=$user_root/$to
+extra_src=$extra_root/$from
+extra_dest=$extra_root/$to
+
+if [[ ! -e $src && ! -L $src ]]; then
+  emit false not-user
+  exit 1
+fi
+if [[ -e $dest || -L $dest || -e $extra_dest || -L $extra_dest ]]; then
+  emit false exists
+  exit 1
+fi
+
+old_theme_real=""
+old_extra_real=""
+if [[ -d $src && ! -L $src ]]; then
+  old_theme_real=$(realpath -e "$src")
+fi
+if [[ -d $extra_src && ! -L $extra_src ]]; then
+  old_extra_real=$(realpath -e "$extra_src")
+fi
+
+bg_real=""
+if [[ -L $bg_link ]]; then
+  bg_real=$(readlink -f "$bg_link" 2>/dev/null || true)
+fi
+
+if ! mv -- "$src" "$dest"; then
+  emit false failed
+  exit 1
+fi
+if [[ -n $old_theme_real ]]; then
+  new_theme_real=$(realpath -e "$dest" 2>/dev/null || true)
+  remember_rewrite "$old_theme_real" "$new_theme_real"
+fi
+
+if [[ -e $extra_src || -L $extra_src ]]; then
+  if ! mv -- "$extra_src" "$extra_dest"; then
+    mv -- "$dest" "$src" || true
+    rewrite_from=()
+    rewrite_to=()
+    emit false failed
+    exit 1
+  fi
+  if [[ -n $old_extra_real ]]; then
+    new_extra_real=$(realpath -e "$extra_dest" 2>/dev/null || true)
+    remember_rewrite "$old_extra_real" "$new_extra_real"
+  fi
+fi
+
+current=$(tr -d '\n' <"$name_file" 2>/dev/null || true)
+if [[ $current == "$from" ]]; then
+  mkdir -p "${name_file%/*}"
+  printf '%s\n' "$to" >"$name_file"
+fi
+
+if [[ -f $state_dir/$from && ! -L $state_dir/$from && ! -e $state_dir/$to ]]; then
+  state_line=$(head -n 1 "$state_dir/$from" || true)
+  state_line=$(apply_rewrite "$state_line")
+  printf '%s\n' "$state_line" >"$state_dir/$to"
+  rm -f -- "$state_dir/$from"
+fi
+
+new_bg=""
+if [[ -n $bg_real ]]; then
+  moved_bg=$(apply_rewrite "$bg_real")
+  if [[ $moved_bg != "$bg_real" && -f $moved_bg ]]; then
+    ln -nsf "$moved_bg" "$bg_link"
+    new_bg=$moved_bg
+  fi
+fi
+
+emit true "" "$new_bg"

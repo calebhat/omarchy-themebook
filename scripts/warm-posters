@@ -1,0 +1,51 @@
+#!/bin/bash
+# Cache a still frame for each live background passed as an argument.
+# Prints "updated" when a new frame was written. Skips files that already
+# have a frame or a recorded failure.
+
+set -euo pipefail
+
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/image-selector
+max_bytes=268435456
+updated=0
+count=0
+
+is_video() {
+  [[ ${1,,} =~ \.(mp4|m4v|mov|webm|mkv|avi)$ ]]
+}
+
+mkdir -p "$cache"
+
+for image in "$@"; do
+  if (( count >= 40 )); then
+    break
+  fi
+  count=$((count + 1))
+  [[ -n $image && $image != *..* && ${#image} -le 512 ]] || continue
+  [[ -f $image ]] || continue
+  is_video "$image" || continue
+  size=$(stat -c%s "$image" 2>/dev/null || echo 0)
+  if (( size <= 0 || size > max_bytes )); then
+    continue
+  fi
+  signature=$(stat -Lc '%s:%Y' "$image" 2>/dev/null) || continue
+  hash=$(printf '%s\t%s' "$image" "$signature" | md5sum | cut -d ' ' -f 1)
+  thumbnail=$cache/$hash.jpg
+  [[ -f $thumbnail || -f $thumbnail.failed ]] && continue
+  command -v ffmpegthumbnailer >/dev/null 2>&1 || exit 0
+  tmp=$thumbnail.$$.jpg
+  if timeout -k 5 10 ffmpegthumbnailer -i "$image" -o "$tmp" -s 480 -q 8 >/dev/null 2>&1; then
+    mv -f "$tmp" "$thumbnail"
+    updated=1
+  else
+    status=$?
+    rm -f "$tmp"
+    if (( status != 124 && status != 137 )); then
+      : >"$thumbnail.failed"
+    fi
+  fi
+done
+
+if (( updated == 1 )); then
+  printf 'updated\n'
+fi

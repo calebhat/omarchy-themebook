@@ -25,6 +25,7 @@ mkdir -p "$fake/home/.config/omarchy/themes/bad theme/backgrounds"
 mkdir -p "$fake/home/.local/state/omarchy/current"
 mkdir -p "$fake/omarchy/themes/catppuccin/backgrounds"
 write_png "$fake/home/.config/omarchy/themes/aether/backgrounds/wall.png"
+printf 'not a video\n' >"$fake/home/.config/omarchy/themes/aether/backgrounds/clip.mp4"
 write_png "$fake/home/.config/omarchy/themes/bad theme/backgrounds/wall.png"
 mkdir -p "$fake/home/.config/omarchy/themes/ancient-portal/backgrounds"
 write_png "$fake/home/.config/omarchy/themes/ancient-portal/backgrounds/0-deep-forest.jpg"
@@ -37,13 +38,17 @@ printf 'catppuccin\n' >"$fake/home/.local/state/omarchy/current/theme.name"
 
 isolated=$(HOME="$fake/home" OMARCHY_PATH="$fake/omarchy" THEMEBOOK_CATALOG_WRAPPED=1 "$root/scripts/catalog")
 echo "$isolated" | jq -e 'type == "array" and length == 3' >/dev/null
-echo "$isolated" | jq -e 'any(.[]; .slug == "aether" and .source == "user" and (.backgrounds | length) > 0)' >/dev/null
-echo "$isolated" | jq -e 'any(.[]; .slug == "catppuccin" and .source == "stock" and .preview != "")' >/dev/null
+echo "$isolated" | jq -e 'any(.[]; .slug == "aether" and .source == "user" and (.backgrounds | length) > 0 and any(.backgrounds[]; endswith("clip.mp4")) and (.backgroundPosters | type == "object"))' >/dev/null
+echo "$isolated" | jq -e 'any(.[]; .slug == "catppuccin" and .source == "stock" and .preview != "" and (.appPreview | endswith("preview.png")))' >/dev/null
+echo "$isolated" | jq -e 'any(.[]; .slug == "ancient-portal" and .appPreview == "")' >/dev/null
 echo "$isolated" | jq -e 'any(.[]; .slug == "ancient-portal" and (.preview | endswith("ancient-portal.png")))' >/dev/null
 echo "$isolated" | jq -e 'all(.[]; .slug != "bad theme")' >/dev/null
+echo "$isolated" | jq -e 'all(.[]; (.added | type == "number") and .added > 0 and (.ownedBackgrounds | type == "array"))' >/dev/null
+echo "$isolated" | jq -e 'any(.[]; .slug == "aether" and (.ownedBackgrounds | length) > 0)' >/dev/null
+echo "$isolated" | jq -e 'any(.[]; .slug == "catppuccin" and (.ownedBackgrounds | length) == 0)' >/dev/null
 
 out=$("$root/scripts/catalog")
 echo "$out" | jq -e 'type == "array" and length > 0' >/dev/null
-echo "$out" | jq -e 'all(.[]; has("slug") and has("name") and has("source") and has("colors"))' >/dev/null
+echo "$out" | jq -e 'all(.[]; has("slug") and has("name") and has("source") and has("colors") and (.added | type == "number") and .added > 0 and (.ownedBackgrounds | type == "array") and (.appPreview | type == "string") and (.backgroundPosters | type == "object"))' >/dev/null
 echo "$out" | jq -e 'any(.[]; .current == true)' >/dev/null
 echo "catalog ok ($("$root/scripts/catalog" | jq 'length') themes, isolated $(echo "$isolated" | jq 'length'))"

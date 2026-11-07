@@ -3,7 +3,7 @@ const fs = require("fs")
 const path = require("path")
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
   .replace(/^\.pragma library\s*/, "")
-eval(src + "\nmodule.exports = { defaultConfig, normalizeConfig, flatten, clockPeriod, bumpHHMM, pruneConfig, dropThemeFromConfig, canDeleteFromOs, parseGitUpdateLine, gitUpdateSummary, hasGitThemes, toggleInList, moveInList, isValidSlug, isReservedSection, currentPeriod, sanitizeFolderName, isCollapsed, activeRule, themeSlugForBackground, moveFolderIds, parseTimeInput, formatTimeDisplay, formatHourMinute, hourIsPm, applyMeridiem, parseClockTime, pickerSections, fuzzyMatch, minutesOf, moveIdBefore, wallpaperCyclePaths, nextWallpaper, cycleFolderChoices, isReorderableSection, themeWallpaperPaths, cycleIntervalMs, cycleSlugs, syncThemeCycleState, activeWallpaperSpec, isScheduleActive, clearSchedule, scheduleActiveLabel, defaultWallpaper, applyDefaultPreviews, boundCatalog, foldersForSlug, addSlugToFolder, dropSlugFromFolder, replaceFolderThemes, setThemeFolders, colorKeys, normalizeHex, colorFor, paletteLines, paletteText }")
+eval(src + "\nmodule.exports = { defaultConfig, normalizeConfig, flatten, destinationRows, clockPeriod, bumpHHMM, pruneConfig, dropThemeFromConfig, canDeleteFromOs, canRenameTheme, slugifyThemeName, themeTitle, backgroundOwned, mapRewrittenPath, rewriteConfigPaths, renameSlugInConfig, dropBackgroundPath, parseToolResult, toolErrorText, parseGitUpdateLine, gitUpdateSummary, hasGitThemes, toggleInList, moveInList, isValidSlug, isReservedSection, currentPeriod, sanitizeFolderName, isCollapsed, activeRule, themeSlugForBackground, moveFolderIds, parseTimeInput, formatTimeDisplay, formatHourMinute, hourIsPm, applyMeridiem, parseClockTime, pickerSections, fuzzyMatch, minutesOf, moveIdBefore, wallpaperCyclePaths, nextWallpaper, cycleFolderChoices, isReorderableSection, themeWallpaperPaths, cycleIntervalMs, cycleSlugs, syncThemeCycleState, activeWallpaperSpec, isScheduleActive, clearSchedule, scheduleActiveLabel, defaultWallpaper, applyDefaultPreviews, boundCatalog, foldersForSlug, addSlugToFolder, dropSlugFromFolder, replaceFolderThemes, setThemeFolders, colorKeys, normalizeHex, colorFor, paletteLines, paletteText, isLivePath, scheduleFolderChoices, scheduleTargetRows, folderHoldSlug, activeFolderCycle, stampFolderCycle, syncScheduleFolders }")
 
 const m = module.exports
 const cfg = m.normalizeConfig({
@@ -60,7 +60,7 @@ if (!emptyRec.find(r => r.id === "user").draggable) throw new Error("user dragga
 if (!emptyRec.find(r => r.id === "stock").draggable) throw new Error("stock draggable")
 const reordered = m.normalizeConfig({ sectionOrder: ["stock", "user", "recents", "favorites"] })
 const reorderedIds = m.flatten(themes, reordered, "all", "").filter(r => r.rowType === "header").map(r => r.id)
-if (reorderedIds.slice(0, 4).join() !== "stock,user,recents,favorites") throw new Error("persist section order " + reorderedIds.join())
+if (reorderedIds.join() !== "stock,user,recents,added,favorites") throw new Error("persist section order " + reorderedIds.join())
 if (m.moveIdBefore(["favorites", "recents", "user"], "user", "favorites").join() !== "user,favorites,recents") throw new Error("moveIdBefore")
 const cyclePaths = m.wallpaperCyclePaths(
   { wallpaperCycle: { folderId: "favorites" }, favorites: ["nord"] },
@@ -130,6 +130,88 @@ const nestedWp = m.normalizeConfig({
 if (!m.activeWallpaperSpec(nestedWp, "day").on) throw new Error("nested theme-cycle wallpaper spec")
 if (m.activeWallpaperSpec(m.clearSchedule(nestedWp), "day").on)
   throw new Error("clear nested wallpaper spec")
+const folderThemes = [{ slug: "gruv", name: "Gruv" }, { slug: "rose", name: "Rose" }]
+const folderRule = m.normalizeConfig({
+  schedule: {
+    mode: "rules",
+    enabled: true,
+    rules: [{ id: "rule-1", time: "00:00", theme: "nord", folderId: "favorites", enabled: true, wallpaperEnabled: true, wallpaperMinutes: 4, cycleMinutes: 12 }]
+  },
+  favorites: ["gruv", "rose"]
+})
+if (folderRule.schedule.rules[0].theme !== "") throw new Error("folder row clears theme")
+if (folderRule.schedule.rules[0].folderId !== "favorites") throw new Error("keep folder target")
+if (folderRule.schedule.rules[0].cycleMinutes !== 12) throw new Error("folder cycle minutes")
+if (!m.activeRule(folderRule.schedule.rules, 0)) throw new Error("folder row inactive")
+const folderWp = m.activeWallpaperSpec(folderRule, "day", 0)
+if (!folderWp.on || folderWp.theme !== "") throw new Error("folder wallpaper does not pin a slug " + JSON.stringify(folderWp))
+const folderCycle = m.activeFolderCycle(folderRule, "day", 0)
+if (!folderCycle.on || folderCycle.folderId !== "favorites" || folderCycle.minutes !== 12) throw new Error("folder cycle spec")
+if (m.folderHoldSlug(folderRule, folderThemes, "favorites", "", "rose") !== "rose") throw new Error("hold current folder theme")
+if (m.folderHoldSlug(folderRule, folderThemes, "favorites", "gruv", "rose") !== "gruv") throw new Error("hold last folder theme")
+const stampedFolder = m.stampFolderCycle(folderRule, folderCycle, { lastSlug: "gruv", cycleLastAt: 50, resetWallpaper: true })
+if (stampedFolder.schedule.rules[0].lastSlug !== "gruv" || stampedFolder.schedule.rules[0].cycleLastAt !== 50)
+  throw new Error("stamp folder cycle")
+if (stampedFolder.schedule.rules[0].wallpaperLastAt !== 50) throw new Error("folder advance resets wallpaper")
+const droppedRecent = m.normalizeConfig({ schedule: { rules: [{ id: "rule-1", time: "01:00", folderId: "recents" }] } })
+if (droppedRecent.schedule.rules[0].folderId !== "") throw new Error("recents is not a clock folder")
+if (m.activeRule(droppedRecent.schedule.rules, 0)) throw new Error("empty target stayed active")
+const sunFolder = m.normalizeConfig({
+  schedule: { mode: "sun", sun: { enabled: true, day: "nord", dayFolderId: "stock", dayCycleMinutes: 15, dayWallpaperEnabled: true } }
+})
+if (sunFolder.schedule.sun.day !== "" || sunFolder.schedule.sun.dayFolderId !== "stock" || sunFolder.schedule.sun.dayCycleMinutes !== 15)
+  throw new Error("sun day folder")
+const sunCycle = m.activeFolderCycle(sunFolder, "day", 0)
+if (!sunCycle.on || sunCycle.folderId !== "stock") throw new Error("sun folder cycle")
+if (m.activeWallpaperSpec(sunFolder, "day", 0).theme !== "") throw new Error("sun folder wallpaper pinned a theme")
+const goneScheduleFolder = m.syncScheduleFolders({
+  schedule: { rules: [{ id: "rule-1", time: "01:00", folderId: "folder-9" }] },
+  folders: []
+})
+if (goneScheduleFolder.schedule.rules[0].folderId !== "") throw new Error("clear deleted schedule folder")
+const scheduleFolders = m.scheduleFolderChoices({ sectionOrder: ["favorites", "recents", "added", "user", "stock"] })
+if (scheduleFolders.some(function(row) { return row.id === "recents" || row.id === "added" })) throw new Error("clock folders include shifting lists")
+if (!scheduleFolders.some(function(row) { return row.id === "favorites" })) throw new Error("clock folders keep favorites")
+const targetThemes = [
+  { slug: "nord", name: "Nord", source: "stock" },
+  { slug: "rose", name: "Rose Pine", source: "user" },
+  { slug: "hidden-one", name: "Hidden", source: "user" }
+]
+const targetCfg = m.normalizeConfig({
+  favorites: ["rose"],
+  hidden: ["hidden-one"],
+  sectionOrder: ["favorites", "recents", "added", "user", "stock"],
+  collapsed: { favorites: true, user: false }
+})
+const targetClosed = m.scheduleTargetRows(targetCfg, targetThemes, "", { favorites: false, user: true, stock: false })
+if (targetClosed[0].kind !== "random") throw new Error("target list starts with random")
+const fav = targetClosed.find(function(row) { return row.kind === "folder" && row.id === "favorites" })
+if (!fav || fav.expanded || fav.count !== 1) throw new Error("closed favorite folder")
+if (targetClosed.some(function(row) { return row.kind === "theme" && row.id === "favorites" })) throw new Error("closed folder leaked themes")
+if (targetClosed.some(function(row) { return row.id === "recents" || row.id === "added" })) throw new Error("target list includes shifting folders")
+const targetOpen = m.scheduleTargetRows(targetCfg, targetThemes, "", { favorites: true })
+const favTheme = targetOpen.find(function(row) { return row.kind === "theme" && row.slug === "rose" && row.id === "favorites" })
+if (!favTheme) throw new Error("open folder lists its theme")
+const targetSearch = m.scheduleTargetRows(targetCfg, targetThemes, "nord", {})
+const stock = targetSearch.find(function(row) { return row.kind === "folder" && row.id === "stock" })
+if (!stock || !stock.expanded) throw new Error("search opens the matching folder")
+if (!targetSearch.some(function(row) { return row.kind === "theme" && row.slug === "nord" })) throw new Error("search lists the theme")
+if (targetSearch.some(function(row) { return row.slug === "rose" || row.slug === "hidden-one" })) throw new Error("search kept other themes")
+if (!m.isLivePath("/themes/sakura/clip.mp4")) throw new Error("mp4 is live")
+if (m.isLivePath("/themes/sakura/still.jpg")) throw new Error("jpg is live")
+const posted = m.boundCatalog([{
+  slug: "nord",
+  name: "Nord",
+  backgrounds: ["/themes/nord/clip.mp4", "/themes/nord/still.jpg"],
+  backgroundPosters: {
+    "/themes/nord/clip.mp4": "/cache/clip.jpg",
+    "../clip.mp4": "/cache/bad.jpg",
+    "/themes/nord/still.jpg": "/cache/still.jpg"
+  }
+}])
+if (posted[0].backgroundPosters["/themes/nord/clip.mp4"] !== "/cache/clip.jpg") throw new Error("keep live poster")
+if (posted[0].backgroundPosters["../clip.mp4"] || posted[0].backgroundPosters["/themes/nord/still.jpg"])
+  throw new Error("drop bad posters")
 if (stoppedWp.recents.join() !== "nord") throw new Error("clear keeps recents")
 const stoppedSun = m.clearSchedule({ schedule: { mode: "sun", sun: { enabled: true, day: "nord" } } })
 if (stoppedSun.schedule.mode !== "off" || stoppedSun.schedule.sun.enabled) throw new Error("clear sun")
@@ -288,4 +370,134 @@ if (m.gitUpdateSummary([]) !== "No git-installed user themes to check.") throw n
 if (m.gitUpdateSummary([{ status: "available" }, { status: "current" }, { status: "failed" }]).indexOf("failed") < 0)
   throw new Error("summary mix")
 if (m.gitUpdateSummary([{ status: "available" }]).indexOf("update available") < 0) throw new Error("available summary")
+
+if (m.normalizeConfig({}).collapsed.added !== true) throw new Error("added collapsed by default")
+if (m.normalizeConfig({ collapsed: { added: false } }).collapsed.added !== false) throw new Error("added can expand")
+if (m.normalizeConfig({}).sectionOrder.join() !== "favorites,recents,added,user,stock")
+  throw new Error("default section order")
+if (m.normalizeConfig({}).picker.includeAdded) throw new Error("added picker off")
+if (!m.isReservedSection("added")) throw new Error("added reserved")
+if (!m.isReorderableSection("added")) throw new Error("added reorderable")
+const keptAdded = m.normalizeConfig({ sectionOrder: ["favorites", "user", "added", "recents", "stock"] })
+if (keptAdded.sectionOrder.join() !== "favorites,user,added,recents,stock")
+  throw new Error("keep added place " + keptAdded.sectionOrder.join())
+const stamped = [
+  { slug: "sakura-mochi", name: "Sakura Mochi", source: "user", added: 300 },
+  { slug: "nord", name: "Nord", source: "stock", added: 200 },
+  { slug: "white", name: "White", source: "stock", added: 100 }
+]
+const addedOpen = m.flatten(stamped, m.normalizeConfig({ collapsed: { added: false, recents: true } }), "all", "")
+const addedThemes = addedOpen.filter(r => r.rowType === "theme" && r.section === "added").map(r => r.slug)
+if (addedThemes.join() !== "sakura-mochi,nord,white") throw new Error("added order " + addedThemes.join())
+const addedHeader = addedOpen.find(r => r.id === "added")
+if (!addedHeader || addedHeader.title !== "Recently added" || addedHeader.collapsed || addedHeader.themeCount !== 3)
+  throw new Error("added header")
+const addedClosed = m.flatten(stamped, m.normalizeConfig({}), "all", "")
+if (!addedClosed.find(r => r.id === "added" && r.collapsed === true)) throw new Error("added starts collapsed")
+if (addedClosed.some(r => r.rowType === "theme" && r.section === "added")) throw new Error("collapsed added hides themes")
+const addedIds = addedClosed.filter(r => r.rowType === "header").map(r => r.id)
+if (addedIds.join() !== "favorites,recents,added,user,stock") throw new Error("added after recents " + addedIds.join())
+const manyAdded = []
+for (let i = 0; i < 25; i++) manyAdded.push({ slug: "t" + i, name: "T " + i, source: "user", added: i + 1 })
+const cap = m.flatten(manyAdded, m.normalizeConfig({ collapsed: { added: false } }), "all", "")
+const capSlugs = cap.filter(r => r.rowType === "theme" && r.section === "added").map(r => r.slug)
+if (capSlugs.length !== 20) throw new Error("added cap " + capSlugs.length)
+if (capSlugs[0] !== "t24" || capSlugs[19] !== "t5") throw new Error("added newest first " + capSlugs[0] + ".." + capSlugs[19])
+const ties = [
+  { slug: "b", name: "B", source: "user", added: 5 },
+  { slug: "a", name: "A", source: "user", added: 5 },
+  { slug: "hidden-one", name: "Hidden", source: "user", added: 9 }
+]
+const tieRows = m.flatten(ties, m.normalizeConfig({ collapsed: { added: false }, hidden: ["hidden-one"] }), "all", "")
+  .filter(r => r.section === "added" && r.rowType === "theme").map(r => r.slug)
+if (tieRows.join() !== "a,b") throw new Error("tie break " + tieRows.join())
+const crowd = [{ slug: "old", name: "Old", source: "user", added: 1 }]
+for (let i = 0; i < 19; i++) crowd.push({ slug: "n" + i, name: "N" + i, source: "user", added: 10 + i })
+crowd.push({ slug: "secret", name: "Secret", source: "user", added: 100 })
+const crowdSlugs = m.flatten(crowd, m.normalizeConfig({ collapsed: { added: false }, hidden: ["secret"] }), "all", "")
+  .filter(r => r.section === "added" && r.rowType === "theme").map(r => r.slug)
+if (crowdSlugs.length !== 20 || crowdSlugs.indexOf("old") < 0 || crowdSlugs.indexOf("secret") >= 0)
+  throw new Error("hidden must not take an added slot " + crowdSlugs.join())
+const stampedBound = m.boundCatalog([{ slug: "nord", name: "Nord", added: 12.9 }, { slug: "nope", name: "Nope", added: "x" }])
+if (stampedBound[0].added !== 12 || stampedBound[1].added !== 0) throw new Error("bound added " + stampedBound.map(t => t.added).join())
+const pickAdded = m.pickerSections({
+  picker: { includeAdded: true, includeFavorites: false, includeUser: false, includeStock: false, includeRecents: false, defaultFolder: "added" }
+}, stamped)
+if (!pickAdded.some(s => s.id === "added" && s.themes[0] === "sakura-mochi" && s.themes.length === 3))
+  throw new Error("picker added")
+const searched = m.flatten(stamped, m.normalizeConfig({}), "all", "no-such-theme")
+if (!searched.some(r => r.id === "added")) throw new Error("added header stays while searching")
+if (m.slugifyThemeName("  Bloom Protocol ") !== "bloom-protocol") throw new Error("slugify name")
+if (m.slugifyThemeName("..") !== "") throw new Error("slugify dots")
+if (m.slugifyThemeName("foo/../../bar") !== "") throw new Error("slugify reject")
+if (m.slugifyThemeName("../etc") !== "etc") throw new Error("slugify strip")
+if (m.themeTitle("bloom-protocol") !== "Bloom Protocol") throw new Error("theme title")
+if (!m.canRenameTheme({ slug: "bloom", source: "user" })) throw new Error("rename user")
+if (m.canRenameTheme({ slug: "nord", source: "stock" })) throw new Error("no rename stock")
+const renamed = m.renameSlugInConfig({
+  favorites: ["old-theme", "nord"],
+  folders: [{ id: "dark", name: "Dark", themes: ["old-theme"] }],
+  defaultWallpapers: { "old-theme": "/home/caleb/themes/old-theme/backgrounds/a.jpg" },
+  schedule: { day: "old-theme", night: "nord" },
+  picker: { lastSlug: "old-theme" }
+}, "old-theme", "new-theme")
+if (renamed.favorites.join() !== "new-theme,nord") throw new Error("rename favorites")
+if (renamed.folders[0].themes.join() !== "new-theme") throw new Error("rename folder")
+if (renamed.schedule.day !== "new-theme" || renamed.picker.lastSlug !== "new-theme") throw new Error("rename schedule")
+const rewritten = m.rewriteConfigPaths(renamed, [{ from: "/home/caleb/themes/old-theme", to: "/home/caleb/themes/new-theme" }])
+if (rewritten.defaultWallpapers["new-theme"] !== "/home/caleb/themes/new-theme/backgrounds/a.jpg")
+  throw new Error("rewrite wallpaper " + rewritten.defaultWallpapers["new-theme"])
+if (m.mapRewrittenPath("/etc/passwd", [{ from: "/etc", to: "/tmp" }]) !== "/etc/passwd") throw new Error("short rewrite refused")
+const droppedBg = m.dropBackgroundPath({ defaultWallpapers: { nord: "/a.jpg", white: "/b.jpg" }, wallpaperCycle: { lastPath: "/a.jpg" } }, "/a.jpg")
+if (droppedBg.defaultWallpapers.nord || droppedBg.defaultWallpapers.white !== "/b.jpg") throw new Error("drop one wallpaper")
+if (droppedBg.wallpaperCycle.lastPath !== "") throw new Error("drop cycle path")
+const ownedTheme = { ownedBackgrounds: ["/mine.jpg"], backgrounds: ["/mine.jpg", "/stock.jpg"] }
+if (!m.backgroundOwned(ownedTheme, "/mine.jpg") || m.backgroundOwned(ownedTheme, "/stock.jpg")) throw new Error("owned flag")
+const boundedOwned = m.boundCatalog([{ slug: "nord", name: "Nord", backgrounds: ["/mine.jpg"], ownedBackgrounds: ["/mine.jpg", "/nope.jpg", "../x"] }])
+if (boundedOwned[0].ownedBackgrounds.join() !== "/mine.jpg") throw new Error("bound owned")
+const appBounded = m.boundCatalog([{ slug: "nord", name: "Nord", appPreview: "/themes/nord/preview.png", backgrounds: ["/a.jpg"] }])
+if (appBounded[0].appPreview !== "/themes/nord/preview.png") throw new Error("keep app preview")
+const appDropped = m.boundCatalog([{ slug: "nord", name: "Nord", appPreview: "../preview.png" }])
+if (appDropped[0].appPreview !== "") throw new Error("drop app preview traversal")
+const tool = m.parseToolResult(JSON.stringify({ ok: true, from: "old-theme", to: "new-theme", rewrites: [{ from: "/home/caleb/themes/old-theme", to: "/home/caleb/themes/new-theme" }] }))
+if (!tool || !tool.ok || tool.rewrites.length !== 1) throw new Error("tool result")
+if (m.toolErrorText({ error: "not-owned" }).indexOf("copied") < 0) throw new Error("owned error text")
+const destThemes = [
+  { slug: "sakura-mochi", name: "Sakura Mochi", source: "user" },
+  { slug: "nord", name: "Nord", source: "stock" },
+  { slug: "white", name: "White", source: "stock" },
+  { slug: "aether", name: "Aether", source: "user" }
+]
+const destCfg = m.normalizeConfig({
+  favorites: ["nord"],
+  recents: ["white"],
+  hidden: ["white"],
+  folders: [{ id: "dark", name: "Dark", themes: ["sakura-mochi", "nord"] }],
+  collapsed: { stock: true, dark: false, favorites: false, recents: true, user: false },
+  sectionOrder: ["favorites", "recents", "added", "dark", "user", "stock"]
+})
+const dest = m.destinationRows(destThemes, destCfg, "aether", "")
+const destHeaders = dest.filter(r => r.rowType === "header").map(r => r.id)
+if (destHeaders.join() !== "favorites,dark,user,stock") throw new Error("dest sections " + destHeaders.join())
+if (dest.some(r => r.slug === "aether" || r.slug === "white")) throw new Error("dest excludes source and hidden")
+if (!dest.find(r => r.id === "stock" && r.collapsed === true)) throw new Error("dest stock collapsed")
+if (dest.some(r => r.section === "stock")) throw new Error("collapsed stock hides themes")
+if (!dest.some(r => r.section === "dark" && r.slug === "sakura-mochi")) throw new Error("open folder shows theme")
+const userOrder = dest.filter(r => r.section === "user").map(r => r.slug)
+if (userOrder.join() !== "sakura-mochi") throw new Error("user without excluded " + userOrder.join())
+const destSearch = m.destinationRows(destThemes, destCfg, "", "nor")
+if (!destSearch.some(r => r.section === "stock" && r.slug === "nord")) throw new Error("search opens collapsed")
+if (destSearch.some(r => r.slug === "sakura-mochi")) throw new Error("search filters")
+const alpha = m.destinationRows([
+  { slug: "sakura-mochi", name: "Sakura Mochi", source: "user" },
+  { slug: "aether", name: "Aether", source: "user" }
+], m.normalizeConfig({ collapsed: { user: false }, sectionOrder: ["user", "stock"] }), "", "")
+  .filter(r => r.section === "user").map(r => r.slug)
+if (alpha.join() !== "aether,sakura-mochi") throw new Error("user alpha " + alpha.join())
+const noRecents = m.destinationRows(destThemes, m.normalizeConfig({
+  recents: ["nord"],
+  collapsed: { recents: false, user: false },
+  sectionOrder: ["recents", "user"]
+}), "", "")
+if (noRecents.some(r => r.id === "recents" || r.section === "recents")) throw new Error("dest skips recents")
 console.log("model ok")

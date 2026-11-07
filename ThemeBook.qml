@@ -31,6 +31,11 @@ Item {
   property var assignDraft: []
   property var scheduleExpandIds: []
   property bool confirmRemove: false
+  property bool confirmBg: false
+  property string confirmBgPath: ""
+  property string bgDestMode: ""
+  property string bgDestPath: ""
+  property string bgDestQuery: ""
   property string confirmFolderId: ""
   property string confirmFolderName: ""
   property string mainView: "browse"
@@ -39,6 +44,7 @@ Item {
   property bool dropAtEnd: false
   property real dropLineY: -1
   property bool cycleFolderPickOpen: false
+  property var schedulePickOpen: ({})
   property bool pickerOpen: false
   property string pickerFolderId: ""
   property int pickerIndex: 0
@@ -62,6 +68,20 @@ Item {
     target: svc
     function onRequestPanelView(name) {
       if (name === "schedule" || name === "browse") root.mainView = name
+    }
+    function onThemeRenamed(from, to) {
+      if (root.selectedSlug === from) root.selectedSlug = to
+      root.previewWallpaper = ""
+      root.closeBgDest()
+      root.confirmBg = false
+    }
+    function onBackgroundRemoved(path) {
+      if (root.previewWallpaper === path) root.previewWallpaper = ""
+      root.confirmBg = false
+      root.closeBgDest()
+    }
+    function onActionErrorChanged() {
+      if (svc.actionError) root.copyNotice = ""
     }
   }
   readonly property var themes: svc ? svc.themes : []
@@ -188,6 +208,57 @@ Item {
     root.previewWallpaper = path
   }
 
+  function activeBackground() {
+    var path = root.previewPath()
+    if (!path || !root.selected) return ""
+    var bgs = root.selected.backgrounds || []
+    for (var i = 0; i < bgs.length; i++) if (bgs[i] === path) return path
+    return ""
+  }
+
+  function activeBackgroundOwned() {
+    return Model.backgroundOwned(root.selected, root.activeBackground())
+  }
+
+  function backgroundStrip() {
+    var t = root.selected
+    if (!t) return []
+    var out = []
+    var seen = {}
+    var bgs = t.backgrounds || []
+    var app = t.appPreview || ""
+    if (app) {
+      var listed = false
+      for (var i = 0; i < bgs.length; i++) if (bgs[i] === app) listed = true
+      if (!listed) {
+        out.push(app)
+        seen[app] = true
+      }
+    }
+    for (var j = 0; j < bgs.length; j++) {
+      if (!bgs[j] || seen[bgs[j]]) continue
+      seen[bgs[j]] = true
+      out.push(bgs[j])
+    }
+    return out
+  }
+
+  function stripIsAppPreview(path) {
+    var t = root.selected
+    if (!t || !path || path !== t.appPreview) return false
+    var bgs = t.backgrounds || []
+    for (var i = 0; i < bgs.length; i++) if (bgs[i] === path) return false
+    return true
+  }
+
+  readonly property var destinationRows: Model.destinationRows(root.themes, root.config, root.selectedSlug, root.bgDestQuery)
+
+  function closeBgDest() {
+    root.bgDestMode = ""
+    root.bgDestPath = ""
+    root.bgDestQuery = ""
+  }
+
   onSelectedSlugChanged: {
     if (root.previewSlug !== root.selectedSlug) root.previewWallpaper = ""
     root.copyNotice = ""
@@ -195,7 +266,7 @@ Item {
   }
 
   function applySelected() {
-    if (root.folderMenuOpen || root.promptKind || root.confirmRemove) return
+    if (root.folderMenuOpen || root.promptKind || root.confirmRemove || root.confirmBg || root.bgDestMode) return
     if (root.addFolderId.length || root.assignSlug.length) return
     if (svc && svc.pendingManualSlug) return
     if (selected && svc) {
@@ -277,6 +348,7 @@ Item {
     var created = ""
     if (root.promptKind === "folder") created = svc.createFolder(root.promptText || "Folder")
     if (root.promptKind === "rename") svc.renameFolder(root.promptFolderId, root.promptText)
+    if (root.promptKind === "theme" && root.selectedSlug) svc.renameTheme(root.selectedSlug, root.promptText)
     root.promptKind = ""
     if (created && root.assignSlug) {
       var draft = (root.assignDraft || []).slice()
@@ -299,6 +371,7 @@ Item {
     var p = root.config.picker || {}
     if (id === "favorites") return p.includeFavorites !== false
     if (id === "recents") return p.includeRecents === true
+    if (id === "added") return p.includeAdded === true
     if (id === "user") return p.includeUser !== false
     if (id === "stock") return p.includeStock !== false
     var folders = root.config.folders || []
@@ -503,18 +576,66 @@ Item {
     return Model.pickerSections(root.config, root.themes)
   }
 
-  function filteredThemePick() {
-    var q = root.themePickQuery
-    var src = root.themes || []
-    var out = []
-    for (var i = 0; i < src.length; i++) {
-      if (Model.fuzzyMatch(q, src[i].name, src[i].slug)) out.push(src[i])
+  function isLiveBackground(path) {
+    return Model.isLivePath(path)
+  }
+
+  function livePoster(path) {
+    var t = root.selected
+    if (!t || !path || !t.backgroundPosters) return ""
+    return t.backgroundPosters[path] || ""
+  }
+
+  function scheduleTargetText(theme, folderId) {
+    if (folderId) return Model.sectionDisplayName(root.config, folderId)
+    if (theme === "__random_favorite__") return "Random favorite"
+    var found = Model.themeBySlug(root.themes, theme)
+    return found ? (found.name || found.slug) : "Choose…"
+  }
+
+  function schedulePickRows() {
+    return Model.scheduleTargetRows(root.config, root.themes, root.themePickQuery, root.schedulePickOpen)
+  }
+
+  function toggleSchedulePickFolder(id) {
+    var next = {}
+    var cur = root.schedulePickOpen || {}
+    for (var key in cur) next[key] = !!cur[key]
+    next[id] = !next[id]
+    root.schedulePickOpen = next
+  }
+
+  function applySchedulePick(kind, slug, folderId) {
+    if (!svc || !root.themePickRuleId) return
+    var id = root.themePickRuleId
+    if (id === "sun-day") {
+      if (kind === "folder") svc.setSchedule({ dayFolderId: folderId })
+      else svc.setSchedule({ day: slug })
+    } else if (id === "sun-night") {
+      if (kind === "folder") svc.setSchedule({ nightFolderId: folderId })
+      else svc.setSchedule({ night: slug })
+    } else {
+      var rules = root.config.schedule.rules || []
+      for (var i = 0; i < rules.length; i++) {
+        if (rules[i].id !== id) continue
+        if (kind === "folder")
+          svc.updateScheduleRule(rules[i].id, rules[i].time, "", rules[i].enabled, { folderId: folderId })
+        else
+          svc.updateScheduleRule(rules[i].id, rules[i].time, slug, rules[i].enabled)
+        break
+      }
     }
-    return out
+    root.themePickRuleId = ""
   }
 
   onThemePickRuleIdChanged: {
-    if (root.themePickRuleId.length) root.themePickQuery = ""
+    if (!root.themePickRuleId.length) return
+    root.themePickQuery = ""
+    var open = {}
+    var folders = Model.scheduleFolderChoices(root.config)
+    for (var i = 0; i < folders.length; i++)
+      open[folders[i].id] = !Model.isCollapsed(root.config, folders[i].id)
+    root.schedulePickOpen = open
   }
 
   function clearDropPreview() {
@@ -727,6 +848,19 @@ Item {
             root.confirmRemove = false
             event.accepted = true
           }
+          return
+        }
+        if (root.confirmBg) {
+          if (event.key === Qt.Key_Escape) { root.confirmBg = false; event.accepted = true }
+          else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            if (svc && root.selectedSlug && root.confirmBgPath) svc.deleteBackground(root.selectedSlug, root.confirmBgPath)
+            root.confirmBg = false
+            event.accepted = true
+          }
+          return
+        }
+        if (root.bgDestMode.length > 0) {
+          if (event.key === Qt.Key_Escape) { root.closeBgDest(); event.accepted = true }
           return
         }
         if (root.themePickRuleId.length > 0) {
@@ -1453,7 +1587,7 @@ Item {
                     }
                   }
                   Rectangle {
-                    visible: modelData.id === "favorites" || modelData.id === "recents" || modelData.id === "user" || modelData.id === "stock" || !Model.isReservedSection(modelData.id)
+                    visible: modelData.id === "favorites" || modelData.id === "recents" || modelData.id === "added" || modelData.id === "user" || modelData.id === "stock" || !Model.isReservedSection(modelData.id)
                     Layout.preferredHeight: Style.space(22)
                     Layout.preferredWidth: Style.space(78)
                     radius: Style.cornerRadius
@@ -1652,9 +1786,11 @@ Item {
                 Image {
                   id: hero
                   anchors.fill: parent
+                  visible: !root.isLiveBackground(root.previewPath())
                   source: {
                     var path = root.previewPath()
-                    return path ? Util.fileUrl(path) : ""
+                    if (!path || root.isLiveBackground(path)) return ""
+                    return Util.fileUrl(path)
                   }
                   fillMode: Image.PreserveAspectCrop
                   asynchronous: true
@@ -1662,12 +1798,41 @@ Item {
                   sourceSize.width: 960
                   sourceSize.height: 540
                 }
+                Image {
+                  id: heroPoster
+                  anchors.fill: parent
+                  visible: root.isLiveBackground(root.previewPath())
+                  source: {
+                    var livePath = root.previewPath()
+                    var poster = root.livePoster(livePath)
+                    return poster ? Util.fileUrl(poster) : ""
+                  }
+                  fillMode: Image.PreserveAspectCrop
+                  asynchronous: true
+                  cache: true
+                  sourceSize.width: 960
+                  sourceSize.height: 540
+                }
+                Loader {
+                  id: liveLoader
+                  anchors.fill: parent
+                  active: root.isLiveBackground(root.previewPath())
+                  source: "LivePreview.qml"
+                }
+                Binding {
+                  target: liveLoader.item
+                  property: "fileUrl"
+                  when: liveLoader.status === Loader.Ready && liveLoader.item
+                  value: root.isLiveBackground(root.previewPath()) ? Util.fileUrl(root.previewPath()) : ""
+                }
                 Text {
                   textFormat: Text.PlainText
                   visible: {
                     if (!root.selected) return true
                     var path = root.previewPath()
-                    return !path || hero.status === Image.Error
+                    if (!path) return true
+                    if (root.isLiveBackground(path)) return liveLoader.status === Loader.Error && heroPoster.status === Image.Error
+                    return hero.status === Image.Error
                   }
                   anchors.centerIn: parent
                   text: !root.selected ? "Select a theme" : "No preview"
@@ -1772,8 +1937,8 @@ Item {
 
               Text {
                 textFormat: Text.PlainText
-                visible: root.selected && root.selected.backgrounds && root.selected.backgrounds.length
-                text: "Backgrounds — click to preview here. Star one as default for apply and picker."
+                visible: root.backgroundStrip().length > 0
+                text: "Backgrounds — click to preview here. Apps returns to the theme preview. Star a wallpaper as default for apply and picker."
                 color: root.muted
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -1785,11 +1950,12 @@ Item {
                 orientation: ListView.Horizontal
                 clip: true
                 spacing: Style.space(6)
-                visible: root.selected && root.selected.backgrounds && root.selected.backgrounds.length
-                model: root.selected && root.selected.backgrounds ? root.selected.backgrounds : []
+                visible: root.backgroundStrip().length > 0
+                model: root.backgroundStrip()
                 delegate: Rectangle {
                   required property var modelData
-                  readonly property bool isDefault: !!(root.selected && Model.defaultWallpaper(root.config, root.selected) === modelData)
+                  readonly property bool isAppPreview: root.stripIsAppPreview(modelData)
+                  readonly property bool isDefault: !isAppPreview && !!(root.selected && Model.defaultWallpaper(root.config, root.selected) === modelData)
                   readonly property bool isPreview: root.previewPath() === modelData
                   width: 144
                   height: 84
@@ -1800,19 +1966,60 @@ Item {
                   border.color: isDefault && !isPreview ? Util.alpha(root.fg, 0.35) : root.accent
                   Image {
                     anchors.fill: parent
-                    source: Util.fileUrl(modelData)
+                    source: {
+                      if (root.isLiveBackground(modelData)) {
+                        var poster = root.livePoster(modelData)
+                        return poster ? Util.fileUrl(poster) : ""
+                      }
+                      return Util.fileUrl(modelData)
+                    }
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true
                     sourceSize.width: 288
                     sourceSize.height: 168
                   }
-                  MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.setPreviewWallpaper(modelData)
+                  Rectangle {
+                    visible: isAppPreview ? false : root.isLiveBackground(modelData)
+                    anchors.left: parent.left
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 3
+                    height: Style.space(16)
+                    width: liveLab.implicitWidth + Style.space(8)
+                    radius: Style.cornerRadius
+                    color: Util.alpha(root.bg, 0.72)
+                    Text {
+                      id: liveLab
+                      textFormat: Text.PlainText
+                      anchors.centerIn: parent
+                      text: "Live"
+                      color: root.fg
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
                   }
                   Rectangle {
+                    visible: isAppPreview
+                    anchors.left: parent.left
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 3
+                    height: Style.space(16)
+                    width: appsLab.implicitWidth + Style.space(8)
+                    radius: Style.cornerRadius
+                    color: Util.alpha(root.bg, 0.72)
+                    Text {
+                      id: appsLab
+                      textFormat: Text.PlainText
+                      anchors.centerIn: parent
+                      text: "Apps"
+                      color: root.fg
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+                  }
+                  Rectangle {
+                    z: 2
+                    visible: !isAppPreview
                     anchors.right: parent.right
                     anchors.top: parent.top
                     anchors.margins: 3
@@ -1833,7 +2040,113 @@ Item {
                       onClicked: if (svc && root.selected) svc.setDefaultWallpaper(root.selected.slug, modelData)
                     }
                   }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.setPreviewWallpaper(modelData)
+                  }
                 }
+              }
+
+              Row {
+                Layout.fillWidth: true
+                spacing: Style.space(6)
+                visible: root.activeBackground().length > 0
+                Rectangle {
+                  width: copyBgLab.implicitWidth + Style.space(16)
+                  height: Style.space(30)
+                  radius: Style.cornerRadius
+                  color: Util.alpha(root.fg, 0.08)
+                  Text {
+                    textFormat: Text.PlainText
+                    id: copyBgLab
+                    anchors.centerIn: parent
+                    text: "Copy to theme"
+                    color: root.fg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                      root.bgDestQuery = ""
+                      root.bgDestMode = "copy"
+                      root.bgDestPath = root.activeBackground()
+                    }
+                  }
+                }
+                Rectangle {
+                  visible: root.activeBackgroundOwned()
+                  width: moveBgLab.implicitWidth + Style.space(16)
+                  height: Style.space(30)
+                  radius: Style.cornerRadius
+                  color: Util.alpha(root.fg, 0.08)
+                  Text {
+                    textFormat: Text.PlainText
+                    id: moveBgLab
+                    anchors.centerIn: parent
+                    text: "Move to theme"
+                    color: root.fg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                      root.bgDestQuery = ""
+                      root.bgDestMode = "move"
+                      root.bgDestPath = root.activeBackground()
+                    }
+                  }
+                }
+                Rectangle {
+                  visible: root.activeBackgroundOwned()
+                  width: delBgLab.implicitWidth + Style.space(16)
+                  height: Style.space(30)
+                  radius: Style.cornerRadius
+                  color: Util.alpha(root.fg, 0.08)
+                  Text {
+                    textFormat: Text.PlainText
+                    id: delBgLab
+                    anchors.centerIn: parent
+                    text: "Delete background"
+                    color: root.fg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                      root.confirmBgPath = root.activeBackground()
+                      root.confirmBg = true
+                    }
+                  }
+                }
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                visible: root.activeBackground().length > 0 && !root.activeBackgroundOwned()
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: "Packaged wallpaper. Copy it into a theme. Move and delete stay on wallpapers you own."
+                color: root.muted
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                visible: !!(svc && svc.actionError)
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: svc ? svc.actionError : ""
+                color: root.accent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
               }
 
               Flow {
@@ -1849,6 +2162,7 @@ Item {
                     { id: "show", label: "Show" },
                     { id: "random", label: "Random favorite" },
                     { id: "update", label: "Check git themes" },
+                    { id: "rename", label: "Rename" },
                     { id: "remove", label: "Delete from OS" },
                     { id: "apply", label: "Apply theme" }
                   ]
@@ -1860,6 +2174,7 @@ Item {
                       if (modelData.id === "hide") return root.config.hidden.indexOf(root.selectedSlug) < 0
                       if (modelData.id === "show") return root.config.hidden.indexOf(root.selectedSlug) >= 0
                       if (modelData.id === "update") return !!(root.selected && root.selected.git)
+                      if (modelData.id === "rename") return Model.canRenameTheme(root.selected)
                       if (modelData.id === "remove") return !!(svc && Model.canDeleteFromOs(root.selected, svc.currentSlug))
                       if (modelData.id === "random") return !!(root.config.favorites && root.config.favorites.length)
                       return true
@@ -1893,6 +2208,11 @@ Item {
                         else if (modelData.id === "show" && selectedSlug) svc.toggleHidden(selectedSlug)
                         else if (modelData.id === "random") svc.randomFavorite()
                         else if (modelData.id === "update") svc.updateGitThemes()
+                        else if (modelData.id === "rename" && root.selected) {
+                          root.promptKind = "theme"
+                          root.promptText = root.selected.name || root.selected.slug
+                          promptField.text = root.promptText
+                        }
                         else if (modelData.id === "remove") root.confirmRemove = true
                         else if (modelData.id === "apply") root.applySelected()
                       }
@@ -2232,8 +2552,8 @@ Item {
           Text {
             textFormat: Text.PlainText
             text: config.schedule.mode === "sun"
-              ? "Sunrise and sunset use your weather location. Pick a theme for each. Expand a row to cycle wallpapers while that period is active."
-              : "Type a time and pick a theme. ThemeBook applies the latest Timed Theme whose time has already passed. Expand a row to cycle wallpapers for that theme."
+              ? "Sunrise and sunset use your weather location. Choose a target for each row. Select a folder to walk its themes until the period ends, or open a folder and pick one theme. Expand a row to set how often themes change and to rotate wallpapers."
+              : "Choose a target for each time. Select a folder to walk its themes until the next time, or open a folder and pick one theme. ThemeBook applies the latest row whose time has already passed. Expand a row to set how often themes change and to rotate wallpapers."
             color: root.muted
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
@@ -2336,9 +2656,10 @@ Item {
                   required property int index
                   readonly property var rule: root.scheduleRuleById(modelData)
                   readonly property bool expanded: root.isScheduleExpanded(String(modelData))
+                  readonly property bool folderTarget: !!(rule && rule.folderId)
                   visible: !!rule
                   width: schedCol.width
-                  height: expanded ? Style.space(92) : Style.space(44)
+                  height: expanded ? (folderTarget ? Style.space(136) : Style.space(92)) : Style.space(44)
                   radius: Style.cornerRadius
                   color: Util.alpha(root.fg, 0.06)
                   border.width: rule && rule.enabled ? 1 : 0
@@ -2421,12 +2742,22 @@ Item {
                         textFormat: Text.PlainText
                         anchors.fill: parent
                         anchors.leftMargin: Style.space(8)
-                        anchors.rightMargin: Style.space(8)
+                        anchors.rightMargin: Style.space(22)
                         elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
-                        text: (Model.themeBySlug(root.themes, rule ? rule.theme : "") || { name: "Choose theme…" }).name
+                        text: root.scheduleTargetText(rule ? rule.theme : "", rule ? rule.folderId : "")
                         color: root.fg
                         font.family: root.fontFamily
+                      }
+                      Text {
+                        textFormat: Text.PlainText
+                        anchors.right: parent.right
+                        anchors.rightMargin: Style.space(8)
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "▾"
+                        color: root.muted
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
                       }
                       MouseArea {
                         anchors.fill: parent
@@ -2499,6 +2830,48 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.toggleScheduleExpand(String(modelData))
                       }
+                    }
+                  }
+                  Row {
+                    visible: expanded && folderTarget
+                    width: parent.width
+                    height: Style.space(44)
+                    spacing: Style.space(8)
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: "Cycle themes"
+                      color: root.muted
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+                    TextField {
+                      width: 72
+                      anchors.verticalCenter: parent.verticalCenter
+                      color: root.fg
+                      font.family: root.fontFamily
+                      text: String((rule && rule.cycleMinutes) || 30)
+                      inputMethodHints: Qt.ImhDigitsOnly
+                      onEditingFinished: {
+                        if (!svc || !rule) return
+                        var minutes = parseInt(text, 10)
+                        if (isNaN(minutes)) minutes = 30
+                        svc.updateScheduleRule(rule.id, rule.time, rule.theme, rule.enabled, { cycleMinutes: minutes })
+                      }
+                      background: Rectangle {
+                        color: Util.alpha(root.fg, 0.08)
+                        radius: Style.cornerRadius
+                        border.width: 1
+                        border.color: Util.alpha(root.fg, 0.14)
+                      }
+                    }
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: "minutes"
+                      color: root.muted
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
                     }
                   }
                   Row {
@@ -2604,8 +2977,14 @@ Item {
                   readonly property int wpMin: modelData.id === "day"
                     ? ((config.schedule.sun && config.schedule.sun.dayWallpaperMinutes) || 5)
                     : ((config.schedule.sun && config.schedule.sun.nightWallpaperMinutes) || 5)
+                  readonly property bool folderTarget: modelData.id === "day"
+                    ? !!(config.schedule.sun && config.schedule.sun.dayFolderId)
+                    : !!(config.schedule.sun && config.schedule.sun.nightFolderId)
+                  readonly property int cycleMin: modelData.id === "day"
+                    ? ((config.schedule.sun && config.schedule.sun.dayCycleMinutes) || 30)
+                    : ((config.schedule.sun && config.schedule.sun.nightCycleMinutes) || 30)
                   width: schedCol.width
-                  height: expanded ? Style.space(92) : Style.space(44)
+                  height: expanded ? (folderTarget ? Style.space(136) : Style.space(92)) : Style.space(44)
                   radius: Style.cornerRadius
                   color: Util.alpha(root.fg, 0.06)
                   border.width: root.scheduleCursor === index ? 1 : 0
@@ -2641,15 +3020,29 @@ Item {
                         textFormat: Text.PlainText
                         anchors.fill: parent
                         anchors.leftMargin: Style.space(8)
-                        anchors.rightMargin: Style.space(8)
+                        anchors.rightMargin: Style.space(22)
                         elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
-                        text: (Model.themeBySlug(root.themes, modelData.id === "day" ? config.schedule.sun.day : config.schedule.sun.night) || { name: "Choose theme…" }).name
+                        text: root.scheduleTargetText(
+                          modelData.id === "day" ? config.schedule.sun.day : config.schedule.sun.night,
+                          modelData.id === "day" ? config.schedule.sun.dayFolderId : config.schedule.sun.nightFolderId
+                        )
                         color: root.fg
                         font.family: root.fontFamily
                       }
+                      Text {
+                        textFormat: Text.PlainText
+                        anchors.right: parent.right
+                        anchors.rightMargin: Style.space(8)
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "▾"
+                        color: root.muted
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
+                      }
                       MouseArea {
                         anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: root.themePickRuleId = "sun-" + modelData.id
                       }
                     }
@@ -2674,6 +3067,49 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.toggleScheduleExpand("sun-" + modelData.id)
                       }
+                    }
+                  }
+                  Row {
+                    visible: expanded && folderTarget
+                    width: parent.width
+                    height: Style.space(44)
+                    spacing: Style.space(8)
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: "Cycle themes"
+                      color: root.muted
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+                    TextField {
+                      width: 72
+                      anchors.verticalCenter: parent.verticalCenter
+                      color: root.fg
+                      font.family: root.fontFamily
+                      text: String(cycleMin)
+                      inputMethodHints: Qt.ImhDigitsOnly
+                      onEditingFinished: {
+                        if (!svc) return
+                        var minutes = parseInt(text, 10)
+                        if (isNaN(minutes)) minutes = 30
+                        if (modelData.id === "day") svc.setSchedule({ dayCycleMinutes: minutes })
+                        else svc.setSchedule({ nightCycleMinutes: minutes })
+                      }
+                      background: Rectangle {
+                        color: Util.alpha(root.fg, 0.08)
+                        radius: Style.cornerRadius
+                        border.width: 1
+                        border.color: Util.alpha(root.fg, 0.14)
+                      }
+                    }
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: "minutes"
+                      color: root.muted
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
                     }
                   }
                   Row {
@@ -3091,7 +3527,7 @@ Item {
             spacing: Style.space(10)
             Text {
               textFormat: Text.PlainText
-              text: root.promptKind === "rename" ? "Rename folder" : "New folder"
+              text: root.promptKind === "rename" ? "Rename folder" : root.promptKind === "theme" ? "Rename theme" : "New folder"
               color: root.fg
               font.family: root.fontFamily
               font.pixelSize: Style.font.subtitle
@@ -3131,7 +3567,7 @@ Item {
                   textFormat: Text.PlainText
                   id: okLabel
                   anchors.centerIn: parent
-                  text: root.promptKind === "rename" ? "Rename" : "Create"
+                  text: root.promptKind === "rename" || root.promptKind === "theme" ? "Rename" : "Create"
                   color: root.fg
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -3322,6 +3758,192 @@ Item {
                   onClicked: if (svc) svc.closeGitUpdate()
                 }
               }
+            }
+          }
+        }
+      }
+
+      Rectangle {
+        visible: root.confirmBg
+        anchors.fill: parent
+        z: 32
+        color: Util.alpha(root.bg, 0.72)
+        MouseArea { anchors.fill: parent; onClicked: root.confirmBg = false }
+        Rectangle {
+          width: 440
+          height: 200
+          radius: Style.cornerRadius
+          color: root.bg
+          border.color: root.accent
+          border.width: 1
+          anchors.centerIn: parent
+          MouseArea { anchors.fill: parent; onClicked: { } }
+          Column {
+            anchors.centerIn: parent
+            spacing: Style.space(12)
+            width: 400
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              wrapMode: Text.WordWrap
+              text: "Delete this background from the theme? The file is removed from disk. Packaged stock wallpapers cannot be deleted."
+              color: root.fg
+              font.family: root.fontFamily
+            }
+            Row {
+              spacing: Style.space(8)
+              Rectangle {
+                width: 80
+                height: Style.space(30)
+                radius: Style.cornerRadius
+                color: Util.alpha(root.fg, 0.08)
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Cancel"; color: root.fg; font.family: root.fontFamily }
+                MouseArea { anchors.fill: parent; onClicked: root.confirmBg = false }
+              }
+              Rectangle {
+                width: 150
+                height: Style.space(30)
+                radius: Style.cornerRadius
+                color: Util.alpha(root.accent, 0.28)
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Delete background"; color: root.fg; font.family: root.fontFamily }
+                MouseArea {
+                  anchors.fill: parent
+                  onClicked: {
+                    if (svc && root.selectedSlug && root.confirmBgPath) svc.deleteBackground(root.selectedSlug, root.confirmBgPath)
+                    root.confirmBg = false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      Rectangle {
+        visible: root.bgDestMode.length > 0
+        anchors.fill: parent
+        z: 33
+        color: Util.alpha(root.bg, 0.72)
+        onVisibleChanged: if (visible) Qt.callLater(function() { bgDestSearch.forceActiveFocus() })
+        MouseArea { anchors.fill: parent; onClicked: root.closeBgDest() }
+        Rectangle {
+          width: 440
+          height: 520
+          radius: Style.cornerRadius
+          color: root.bg
+          border.color: root.accent
+          border.width: 1
+          anchors.centerIn: parent
+          MouseArea { anchors.fill: parent; onClicked: { } }
+          Column {
+            anchors.fill: parent
+            anchors.margins: Style.space(16)
+            spacing: Style.space(8)
+            Text {
+              id: bgDestTitle
+              textFormat: Text.PlainText
+              text: root.bgDestMode === "move" ? "Move background to" : "Copy background to"
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.subtitle
+            }
+            TextField {
+              id: bgDestSearch
+              width: parent.width
+              color: root.fg
+              font.family: root.fontFamily
+              placeholderText: "Search themes"
+              text: root.bgDestQuery
+              onTextChanged: root.bgDestQuery = text
+              Keys.onEscapePressed: function(event) {
+                if (root.bgDestQuery.length) root.bgDestQuery = ""
+                else root.closeBgDest()
+                event.accepted = true
+              }
+              background: Rectangle {
+                color: Util.alpha(root.fg, 0.08)
+                radius: Style.cornerRadius
+                border.width: 1
+                border.color: Util.alpha(root.fg, 0.14)
+              }
+            }
+            ListView {
+              width: parent.width
+              height: parent.height - bgDestTitle.height - bgDestSearch.height - bgDestCancel.height - parent.spacing * 3
+              clip: true
+              spacing: Style.space(4)
+              model: root.destinationRows
+              delegate: Item {
+                required property var modelData
+                width: ListView.view.width
+                height: Style.space(32)
+                Rectangle {
+                  anchors.fill: parent
+                  visible: modelData.rowType === "header"
+                  radius: Style.cornerRadius
+                  color: destHeadHover.containsMouse ? Util.alpha(root.fg, 0.08) : "transparent"
+                  Text {
+                    textFormat: Text.PlainText
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: Style.space(8)
+                    anchors.right: parent.right
+                    elide: Text.ElideRight
+                    text: (modelData.collapsed ? "▸ " : "▾ ") + (modelData.title || "") + " (" + String(modelData.themeCount != null ? modelData.themeCount : 0) + ")"
+                    color: root.fg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                  }
+                  MouseArea {
+                    id: destHeadHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: if (svc && modelData.id) svc.toggleCollapsed(modelData.id)
+                  }
+                }
+                Rectangle {
+                  anchors.fill: parent
+                  visible: modelData.rowType === "theme"
+                  radius: Style.cornerRadius
+                  color: destRowHover.containsMouse ? Util.alpha(root.accent, 0.2) : Util.alpha(root.fg, 0.06)
+                  Text {
+                    textFormat: Text.PlainText
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: Style.space(22)
+                    anchors.right: parent.right
+                    anchors.rightMargin: Style.space(8)
+                    elide: Text.ElideRight
+                    text: modelData.rowType === "theme" ? (modelData.name || modelData.slug || "") : ""
+                    color: root.fg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                  MouseArea {
+                    id: destRowHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                      if (!svc || !root.bgDestPath || !root.selectedSlug || !modelData.slug) return
+                      if (root.bgDestMode === "move") svc.moveBackground(root.selectedSlug, root.bgDestPath, modelData.slug)
+                      else svc.copyBackground(root.selectedSlug, root.bgDestPath, modelData.slug)
+                      root.closeBgDest()
+                    }
+                  }
+                }
+              }
+            }
+            Rectangle {
+              id: bgDestCancel
+              width: 80
+              height: Style.space(30)
+              radius: Style.cornerRadius
+              color: Util.alpha(root.fg, 0.08)
+              Text { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Cancel"; color: root.fg; font.family: root.fontFamily }
+              MouseArea { anchors.fill: parent; onClicked: root.closeBgDest() }
             }
           }
         }
@@ -3529,10 +4151,19 @@ Item {
             spacing: Style.space(8)
             Text {
               textFormat: Text.PlainText
-              text: "Choose theme"
+              text: "Choose target"
               color: root.fg
               font.family: root.fontFamily
               font.pixelSize: Style.font.subtitle
+            }
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              wrapMode: Text.WordWrap
+              text: "Select a folder, or open it and pick one theme."
+              color: root.muted
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
             }
             TextField {
               id: themePickSearch
@@ -3552,41 +4183,71 @@ Item {
             }
             ListView {
               width: parent.width
-              height: parent.height - Style.space(80)
+              height: parent.height - Style.space(108)
               clip: true
-              model: root.filteredThemePick()
+              model: root.schedulePickRows()
               delegate: Rectangle {
                 required property var modelData
                 width: ListView.view.width
                 height: Style.space(36)
                 color: themePickMouse.containsMouse ? Util.alpha(root.accent, 0.16) : "transparent"
                 radius: Style.cornerRadius
-                Text {
-                  textFormat: Text.PlainText
-                  anchors.verticalCenter: parent.verticalCenter
-                  anchors.left: parent.left
-                  anchors.leftMargin: Style.space(8)
-                  text: modelData.name || modelData.slug
-                  color: root.fg
-                  font.family: root.fontFamily
+                Item {
+                  anchors.fill: parent
+                  Item {
+                    id: pickChevron
+                    anchors.left: parent.left
+                    width: modelData.kind === "theme" ? Style.space(36) : (modelData.kind === "folder" ? Style.space(28) : 0)
+                    height: parent.height
+                    Text {
+                      textFormat: Text.PlainText
+                      visible: modelData.kind === "folder"
+                      anchors.centerIn: parent
+                      text: modelData.expanded ? "▼" : "▶"
+                      color: root.muted
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+                    MouseArea {
+                      anchors.fill: parent
+                      enabled: modelData.kind === "folder"
+                      cursorShape: modelData.kind === "folder" ? Qt.PointingHandCursor : Qt.ArrowCursor
+                      onClicked: root.toggleSchedulePickFolder(modelData.id)
+                    }
+                  }
+                  Text {
+                    id: pickSelect
+                    textFormat: Text.PlainText
+                    visible: modelData.kind === "folder"
+                    anchors.right: parent.right
+                    anchors.rightMargin: Style.space(8)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Select"
+                    color: root.accent
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                  Text {
+                    textFormat: Text.PlainText
+                    anchors.left: pickChevron.right
+                    anchors.right: modelData.kind === "folder" ? pickSelect.left : parent.right
+                    anchors.rightMargin: Style.space(8)
+                    anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideRight
+                    text: modelData.kind === "folder"
+                      ? (modelData.name + " (" + modelData.count + ")")
+                      : (modelData.name || modelData.slug)
+                    color: root.fg
+                    font.family: root.fontFamily
+                  }
                 }
                 MouseArea {
                   id: themePickMouse
                   anchors.fill: parent
+                  anchors.leftMargin: modelData.kind === "folder" ? Style.space(28) : 0
                   hoverEnabled: true
-                  onClicked: {
-                    if (!svc) return
-                    if (root.themePickRuleId === "sun-day") svc.setSchedule({ day: modelData.slug })
-                    else if (root.themePickRuleId === "sun-night") svc.setSchedule({ night: modelData.slug })
-                    else {
-                      var rules = root.config.schedule.rules || []
-                      for (var i = 0; i < rules.length; i++) {
-                        if (rules[i].id === root.themePickRuleId)
-                          svc.updateScheduleRule(rules[i].id, rules[i].time, modelData.slug, rules[i].enabled)
-                      }
-                    }
-                    root.themePickRuleId = ""
-                  }
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.applySchedulePick(modelData.kind, modelData.slug, modelData.id)
                 }
               }
             }

@@ -93,6 +93,20 @@ identity_background() {
     -print | sort)
 }
 
+# The theme-root mockup that shows apps. Wallpapers live under backgrounds/.
+app_preview() {
+  local theme_path=$1
+  local slug=$2
+  local preview_name candidate
+  for preview_name in preview.png preview.jpg preview.jpeg preview.webp preview.gif preview.bmp; do
+    candidate=$theme_path/$preview_name
+    if [[ -f $candidate ]] && short_path "$candidate" && path_allowed "$candidate" "$slug"; then
+      realpath -e "$candidate"
+      return
+    fi
+  done
+}
+
 find_preview() {
   local theme_path=$1
   local slug=${theme_path##*/}
@@ -125,26 +139,72 @@ find_preview() {
   return 0
 }
 
+# 1 if the file lives in the user theme or the extra-backgrounds dir.
+# Packaged files under the stock tree are 0 even when a symlink points at them.
+background_owned() {
+  local real=$1
+  local slug=$2
+  local stock_root_real theme_real extra_real
+  [[ -n $real && -f $real ]] || return 1
+  stock_root_real=$(realpath -e "$OMARCHY_THEMES_PATH" 2>/dev/null || true)
+  if [[ -n $stock_root_real && $real == "$stock_root_real/"* ]]; then
+    return 1
+  fi
+  extra_real=$(realpath -e "$HOME/.config/omarchy/backgrounds/$slug" 2>/dev/null || true)
+  if [[ -n $extra_real && $real == "$extra_real/"* ]]; then
+    return 0
+  fi
+  theme_real=$(realpath -e "$USER_THEMES_PATH/$slug" 2>/dev/null || true)
+  [[ -n $theme_real && $real == "$theme_real/backgrounds/"* ]]
+}
+
 list_backgrounds() {
   local theme_path=$1
   local slug=${theme_path##*/}
   local user_bg=$HOME/.config/omarchy/backgrounds/$slug
-  local candidate
+  local candidate real owned
   {
     if [[ -d $user_bg ]]; then
       capped_find "$MAX_BACKGROUNDS" find -P "$user_bg" -maxdepth 1 -type f \
-        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) -print
+        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \
+           -o -iname '*.mp4' -o -iname '*.m4v' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.avi' \) -print
     fi
     if [[ -d $theme_path/backgrounds ]]; then
       capped_find "$MAX_BACKGROUNDS" find -P "$theme_path/backgrounds" -maxdepth 1 -type f \
-        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) -print
+        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \
+           -o -iname '*.mp4' -o -iname '*.m4v' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.avi' \) -print
     fi
   } | sort -u | head -n "$MAX_BACKGROUNDS" | while IFS= read -r candidate; do
     short_path "$candidate" || continue
-    if path_allowed "$candidate" "$slug"; then
-      realpath -e "$candidate"
+    path_allowed "$candidate" "$slug" || continue
+    real=$(realpath -e "$candidate") || continue
+    owned=0
+    if background_owned "$real" "$slug"; then
+      owned=1
     fi
+    printf '%s\t%s\n' "$owned" "$real"
   done
+}
+
+is_video() {
+  [[ ${1,,} =~ \.(mp4|m4v|mov|webm|mkv|avi)$ ]]
+}
+
+# Still frame already cached by the image picker or warm-posters.
+# Catalog does not generate frames; that work has its own time budget.
+video_poster() {
+  local image=$1
+  local cache=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/image-selector
+  local signature hash thumbnail
+  [[ -n $image && -f $image ]] || return 0
+  is_video "$image" || return 0
+  signature=$(stat -Lc '%s:%Y' "$image" 2>/dev/null) || return 0
+  hash=$(printf '%s\t%s' "$image" "$signature" | md5sum | cut -d ' ' -f 1)
+  thumbnail=$cache/$hash.jpg
+  if [[ -f $thumbnail ]]; then
+    printf '%s\n' "$thumbnail"
+  fi
+  return 0
 }
 
 lookup_thumb() {
@@ -152,6 +212,10 @@ lookup_thumb() {
   local cache=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/image-selector
   local signature hash thumbnail
   [[ -n $image && -f $image ]] || return 0
+  if is_video "$image"; then
+    video_poster "$image"
+    return 0
+  fi
   signature=$(stat -Lc '%s:%Y' "$image" 2>/dev/null) || return 0
   hash=$(printf '%s\t%s' "$image" "$signature" | md5sum | cut -d ' ' -f 1)
   thumbnail=$cache/$hash.jpg
@@ -194,6 +258,23 @@ make_swatch() {
   return 0
 }
 
+# Birth of the themes/ entry. Do not follow symlinks: the link's own birth
+# is when that theme was added. Package updates bump mtime on stock trees
+# and would otherwise mark every stock theme as new. Fall back to mtime
+# when the filesystem has no birth time.
+entry_added() {
+  local path=$1
+  local stamp=0
+  stamp=$(stat -c %W "$path" 2>/dev/null || printf '0')
+  if [[ ! $stamp =~ ^[0-9]+$ ]] || (( stamp == 0 )); then
+    stamp=$(stat -c %Y "$path" 2>/dev/null || printf '0')
+  fi
+  if [[ ! $stamp =~ ^[0-9]+$ ]]; then
+    stamp=0
+  fi
+  printf '%s\n' "$stamp"
+}
+
 emit_theme() {
   local slug=$1
   local theme_path=$2
@@ -201,11 +282,14 @@ emit_theme() {
   # Skip this theme only. A non-zero return would kill the rest of the catalog.
   [[ $slug =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 0
   [[ $slug != *..* ]] || return 0
-  local colors_file preview is_current=false is_git=false
+  local colors_file preview app_preview_path is_current=false is_git=false
+  local added
+  added=$(entry_added "$theme_path")
   local accent background foreground red orange yellow green cyan blue magenta mode
   local bg_json='[]'
 
   preview=$(find_preview "$theme_path")
+  app_preview_path=$(app_preview "$theme_path" "$slug")
   if [[ -n $DEFAULTS_JSON ]]; then
     local def
     def=$(jq -r --arg s "$slug" '(.defaultWallpapers // {})[$s] // empty' <<<"$DEFAULTS_JSON" 2>/dev/null || true)
@@ -238,9 +322,22 @@ emit_theme() {
 
   json_room || return 0
   (( theme_count < MAX_THEMES )) || return 0
+  local owned_json='[]'
+  local poster_json='{}'
   if command -v jq >/dev/null 2>&1; then
-    bg_json=$(list_backgrounds "$theme_path" | jq -R -s -c --argjson max "$MAX_BACKGROUNDS" \
-      'split("\n") | map(select(length > 0 and length <= 512)) | .[:$max]')
+    local bg_lines
+    bg_lines=$(list_backgrounds "$theme_path" || true)
+    bg_json=$(printf '%s\n' "$bg_lines" | jq -R -s -c --argjson max "$MAX_BACKGROUNDS" \
+      'split("\n") | map(select(length > 0)) | map(split("\t") | select(length == 2 and (.[1] | length > 0 and length <= 512)) | .[1]) | .[:$max]') || bg_json='[]'
+    owned_json=$(printf '%s\n' "$bg_lines" | jq -R -s -c --argjson max "$MAX_BACKGROUNDS" \
+      'split("\n") | map(select(startswith("1\t"))) | map(.[2:]) | map(select(length > 0 and length <= 512)) | .[:$max]') || owned_json='[]'
+    poster_json=$(printf '%s\n' "$bg_lines" | while IFS=$'\t' read -r _owned path; do
+      [[ -n $path ]] || continue
+      is_video "$path" || continue
+      poster=$(video_poster "$path")
+      [[ -n $poster ]] || continue
+      printf '%s\t%s\n' "$path" "$poster"
+    done | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | select(length == 2 and (.[0] | length > 0 and length <= 512) and (.[1] | length > 0 and length <= 512))) | map({key: .[0], value: .[1]}) | from_entries') || poster_json='{}'
   fi
 
   jq -cn \
@@ -249,11 +346,14 @@ emit_theme() {
     --arg path "$theme_path" \
     --arg source "$source" \
     --arg preview "$preview" \
+    --arg appPreview "$app_preview_path" \
     --arg thumbnail "$thumbnail" \
     --arg mode "$mode" \
     --argjson current "$is_current" \
     --argjson git "$is_git" \
     --argjson backgrounds "$bg_json" \
+    --argjson ownedBackgrounds "$owned_json" \
+    --argjson backgroundPosters "$poster_json" \
     --arg currentBg "$CURRENT_BG" \
     --arg accent "$accent" \
     --arg background "$background" \
@@ -265,17 +365,22 @@ emit_theme() {
     --arg cyan "$cyan" \
     --arg blue "$blue" \
     --arg magenta "$magenta" \
+    --argjson added "$added" \
     '{
       slug: $slug,
       name: $name,
       path: $path,
       source: $source,
       preview: $preview,
+      appPreview: $appPreview,
       thumbnail: $thumbnail,
       mode: $mode,
       current: $current,
       git: $git,
+      added: $added,
       backgrounds: $backgrounds,
+      ownedBackgrounds: $ownedBackgrounds,
+      backgroundPosters: $backgroundPosters,
       currentBackground: $currentBg,
       colors: {
         accent: $accent,

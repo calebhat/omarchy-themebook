@@ -6,7 +6,7 @@ function defaultConfig() {
     hidden: [],
     recents: [],
     folders: [],
-    collapsed: { recents: true },
+    collapsed: { recents: true, added: true },
     clock12: false,
     picker: {
       asked: true,
@@ -16,11 +16,12 @@ function defaultConfig() {
       includeUser: true,
       includeStock: true,
       includeRecents: false,
+      includeAdded: false,
       lastFolder: "",
       lastSlug: "",
       lastFocusRow: "themes"
     },
-    sectionOrder: ["favorites", "recents", "user", "stock"],
+    sectionOrder: ["favorites", "recents", "added", "user", "stock"],
     schedule: {
       enabled: false,
       rules: [],
@@ -53,6 +54,7 @@ function defaultConfig() {
 
 var RESERVED_SECTIONS = {
   recents: true,
+  added: true,
   favorites: true,
   user: true,
   stock: true,
@@ -70,6 +72,7 @@ var MAX_BACKGROUNDS = 48
 var MAX_FOLDERS = 64
 var MAX_RULES = 48
 var MAX_FAVORITES = 256
+var MAX_RECENTLY_ADDED = 20
 var MAX_PATH = 512
 var MAX_NAME = 80
 var MAX_CATALOG_CHARS = 1048576
@@ -143,6 +146,10 @@ function capPath(s) {
   return s
 }
 
+function isLivePath(path) {
+  return /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(String(path || ""))
+}
+
 function maxCatalogChars() { return MAX_CATALOG_CHARS }
 function maxConfigChars() { return MAX_CONFIG_CHARS }
 function maxThemes() { return MAX_THEMES }
@@ -159,6 +166,7 @@ function boundCatalog(themes) {
     t.name = capString(src.name || src.slug, MAX_NAME)
     t.path = capPath(src.path)
     t.preview = capPath(src.preview)
+    t.appPreview = capPath(src.appPreview)
     t.thumbnail = capPath(src.thumbnail)
     t.currentBackground = capPath(src.currentBackground)
     var bgs = []
@@ -170,6 +178,33 @@ function boundCatalog(themes) {
       }
     }
     t.backgrounds = bgs
+    var owned = []
+    var rawOwned = src.ownedBackgrounds
+    if (Array.isArray(rawOwned)) {
+      for (var n = 0; n < rawOwned.length && owned.length < MAX_BACKGROUNDS; n++) {
+        var op = capPath(rawOwned[n])
+        if (!op) continue
+        var keep = false
+        for (var b = 0; b < bgs.length; b++) if (bgs[b] === op) keep = true
+        if (keep) owned.push(op)
+      }
+    }
+    t.ownedBackgrounds = owned
+    var posters = {}
+    var rawPosters = src.backgroundPosters
+    if (rawPosters && typeof rawPosters === "object" && !Array.isArray(rawPosters)) {
+      var posterKeys = Object.keys(rawPosters)
+      for (var p = 0; p < posterKeys.length; p++) {
+        var videoPath = capPath(posterKeys[p])
+        var posterPath = capPath(rawPosters[posterKeys[p]])
+        if (!videoPath || !posterPath || !isLivePath(videoPath)) continue
+        var listed = false
+        for (var q = 0; q < bgs.length; q++) if (bgs[q] === videoPath) listed = true
+        if (listed) posters[videoPath] = posterPath
+      }
+    }
+    t.backgroundPosters = posters
+    t.added = addedStamp(src)
     out.push(t)
   }
   return out
@@ -217,21 +252,40 @@ function normalizeFolders(raw) {
   return out
 }
 
+function finiteStamp(value) {
+  var n = Number(value)
+  if (!isFinite(n) || n < 0) return 0
+  return n
+}
+
+// Clock rows can walk Favorites, User, Stock, or a user folder.
+// Recents and Recently added change membership on their own.
+function scheduleFolderId(value) {
+  var id = normalizeCycleFolderId(value)
+  if (id === "recents" || id === "added") return ""
+  return id
+}
+
 function normalizeRule(raw, index) {
   var r = raw && typeof raw === "object" ? raw : {}
   var id = String(r.id || "").trim()
   if (!id || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) || id.indexOf("..") >= 0)
     id = "rule-" + (index + 1)
-  var lastAt = Number(r.wallpaperLastAt)
-  if (!isFinite(lastAt) || lastAt < 0) lastAt = 0
+  var folderId = scheduleFolderId(r.folderId)
+  var theme = scheduleThemeKey(r.theme)
+  if (folderId) theme = ""
   return {
     id: id,
     time: normalizeHHMM(r.time || r.at, "07:00"),
-    theme: scheduleThemeKey(r.theme),
+    theme: theme,
+    folderId: folderId,
+    cycleMinutes: clampMinutes(r.cycleMinutes, 30),
+    lastSlug: scheduleThemeKey(r.lastSlug),
+    cycleLastAt: finiteStamp(r.cycleLastAt),
     enabled: r.enabled !== false,
     wallpaperEnabled: r.wallpaperEnabled === true,
     wallpaperMinutes: clampMinutes(r.wallpaperMinutes, 5),
-    wallpaperLastAt: lastAt
+    wallpaperLastAt: finiteStamp(r.wallpaperLastAt)
   }
 }
 
@@ -260,6 +314,12 @@ function normalizeSchedule(raw) {
     rules.push(normalizeRule({ id: "rule-night", time: s.nightAt || "19:30", theme: s.night, enabled: s.mode === "clock" }, 1))
   }
   var sunSrc = s.sun && typeof s.sun === "object" ? s.sun : {}
+  var dayFolderId = scheduleFolderId(sunSrc.dayFolderId)
+  var nightFolderId = scheduleFolderId(sunSrc.nightFolderId)
+  var sunDay = scheduleThemeKey(sunSrc.day || s.day)
+  var sunNight = scheduleThemeKey(sunSrc.night || s.night)
+  if (dayFolderId) sunDay = ""
+  if (nightFolderId) sunNight = ""
   var rawMode = String(s.mode || "")
   if (rawMode === "cycle" || rawMode === "wallpaper") rawMode = "wallpapers"
   if (rawMode === "theme") rawMode = "themes"
@@ -279,8 +339,16 @@ function normalizeSchedule(raw) {
     rules: rules,
     sun: {
       enabled: sunEnabled,
-      day: scheduleThemeKey(sunSrc.day || s.day),
-      night: scheduleThemeKey(sunSrc.night || s.night),
+      day: sunDay,
+      night: sunNight,
+      dayFolderId: dayFolderId,
+      nightFolderId: nightFolderId,
+      dayCycleMinutes: clampMinutes(sunSrc.dayCycleMinutes, 30),
+      nightCycleMinutes: clampMinutes(sunSrc.nightCycleMinutes, 30),
+      dayLastSlug: scheduleFolderId(sunSrc.dayFolderId) ? scheduleThemeKey(sunSrc.dayLastSlug) : "",
+      nightLastSlug: scheduleFolderId(sunSrc.nightFolderId) ? scheduleThemeKey(sunSrc.nightLastSlug) : "",
+      dayCycleLastAt: finiteStamp(sunSrc.dayCycleLastAt),
+      nightCycleLastAt: finiteStamp(sunSrc.nightCycleLastAt),
       dayWallpaperEnabled: sunSrc.dayWallpaperEnabled === true,
       nightWallpaperEnabled: sunSrc.nightWallpaperEnabled === true,
       dayWallpaperMinutes: clampMinutes(sunSrc.dayWallpaperMinutes, 5),
@@ -297,7 +365,7 @@ function normalizeSchedule(raw) {
 }
 
 function normalizeCollapsed(raw) {
-  var out = { recents: true }
+  var out = { recents: true, added: true }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out
   var keys = Object.keys(raw)
   for (var i = 0; i < keys.length; i++) {
@@ -306,13 +374,50 @@ function normalizeCollapsed(raw) {
     out[k] = raw[k] === true
   }
   if (raw.recents === false) out.recents = false
+  if (raw.added === false) out.added = false
   return out
 }
 
 function isCollapsed(config, id) {
-  var c = config && config.collapsed ? config.collapsed : { recents: true }
-  if (id === "recents") return c.recents !== false
+  var c = config && config.collapsed ? config.collapsed : { recents: true, added: true }
+  if (id === "recents" || id === "added") return c[id] !== false
   return c[id] === true
+}
+
+// Directory birth time in unix seconds. 0 means unknown and sorts last.
+function addedStamp(theme) {
+  var n = Number(theme && theme.added)
+  if (!isFinite(n) || n <= 0 || n > 1e12) return 0
+  return Math.floor(n)
+}
+
+function recentlyAddedSlugs(themes, config) {
+  var hidden = {}
+  var listHidden = (config && config.hidden) || []
+  for (var h = 0; h < listHidden.length; h++) hidden[listHidden[h]] = true
+  var list = []
+  var src = themes || []
+  for (var i = 0; i < src.length; i++) {
+    var t = src[i]
+    if (!t || !isValidSlug(t.slug) || hidden[t.slug]) continue
+    list.push(t)
+  }
+  list.sort(function(a, b) {
+    var d = addedStamp(b) - addedStamp(a)
+    if (d) return d
+    var an = String(a.name || a.slug || "")
+    var bn = String(b.name || b.slug || "")
+    if (an < bn) return -1
+    if (an > bn) return 1
+    var as = String(a.slug)
+    var bs = String(b.slug)
+    if (as < bs) return -1
+    if (as > bs) return 1
+    return 0
+  })
+  var out = []
+  for (var j = 0; j < list.length && out.length < MAX_RECENTLY_ADDED; j++) out.push(list[j].slug)
+  return out
 }
 
 function normalizeHHMM(value, fallback) {
@@ -437,6 +542,7 @@ function pickerSections(config, themes) {
   function slugsFor(id) {
     if (id === "favorites") return cfg.favorites.slice()
     if (id === "recents") return cfg.recents.slice()
+    if (id === "added") return recentlyAddedSlugs(themes, cfg)
     if (id === "user") {
       var u = []
       for (var i = 0; i < themes.length; i++) if (themes[i].source === "user") u.push(themes[i].slug)
@@ -454,6 +560,7 @@ function pickerSections(config, themes) {
   function nameFor(id) {
     if (id === "favorites") return "Favorites"
     if (id === "recents") return "Recents"
+    if (id === "added") return "Recently added"
     if (id === "user") return "User"
     if (id === "stock") return "Stock"
     for (var f = 0; f < cfg.folders.length; f++)
@@ -463,6 +570,7 @@ function pickerSections(config, themes) {
   function includeFlag(id) {
     if (id === "favorites") return cfg.picker.includeFavorites
     if (id === "recents") return cfg.picker.includeRecents
+    if (id === "added") return cfg.picker.includeAdded
     if (id === "user") return cfg.picker.includeUser
     if (id === "stock") return cfg.picker.includeStock
     for (var f = 0; f < cfg.folders.length; f++)
@@ -560,6 +668,7 @@ function normalizePicker(raw) {
     includeUser: p.includeUser !== false,
     includeStock: p.includeStock !== false,
     includeRecents: p.includeRecents === true,
+    includeAdded: p.includeAdded === true,
     lastFolder: String(p.lastFolder || ""),
     lastSlug: String(p.lastSlug || ""),
     lastFocusRow: p.lastFocusRow === "folders" ? "folders" : "themes"
@@ -567,7 +676,7 @@ function normalizePicker(raw) {
 }
 
 function defaultSectionOrder(folders) {
-  var order = ["favorites", "recents"]
+  var order = ["favorites", "recents", "added"]
   var list = Array.isArray(folders) ? folders : []
   for (var i = 0; i < list.length; i++) order.push(list[i].id)
   order.push("user", "stock")
@@ -575,14 +684,16 @@ function defaultSectionOrder(folders) {
 }
 
 function normalizeSectionOrder(raw, folders) {
-  var allowed = { favorites: true, recents: true, user: true, stock: true }
+  var allowed = { favorites: true, recents: true, added: true, user: true, stock: true }
   var list = Array.isArray(folders) ? folders : []
   for (var i = 0; i < list.length; i++) allowed[list[i].id] = true
   var out = []
   var seen = {}
   var src = Array.isArray(raw) ? raw : []
+  var rawHadAdded = false
   for (var j = 0; j < src.length; j++) {
     var id = String(src[j] || "").trim()
+    if (id === "added") rawHadAdded = true
     if (!allowed[id] || seen[id]) continue
     seen[id] = true
     out.push(id)
@@ -592,6 +703,16 @@ function normalizeSectionOrder(raw, folders) {
     if (seen[defaults[k]]) continue
     seen[defaults[k]] = true
     out.push(defaults[k])
+  }
+  // Saved orders from before this section exist. Park it under Recents once.
+  if (!rawHadAdded) {
+    var addedAt = out.indexOf("added")
+    var recAt = out.indexOf("recents")
+    if (addedAt >= 0 && recAt >= 0 && addedAt !== recAt + 1) {
+      out.splice(addedAt, 1)
+      recAt = out.indexOf("recents")
+      out.splice(recAt + 1, 0, "added")
+    }
   }
   return out
 }
@@ -688,7 +809,7 @@ function scheduleActiveLabel(config) {
 
 function isReorderableSection(id) {
   var s = String(id || "")
-  return s === "favorites" || s === "recents" || s === "user" || s === "stock" || !isReservedSection(s)
+  return s === "favorites" || s === "recents" || s === "added" || s === "user" || s === "stock" || !isReservedSection(s)
 }
 
 function moveIdBefore(ids, fromId, toId) {
@@ -706,6 +827,7 @@ function moveIdBefore(ids, fromId, toId) {
 function sectionDisplayName(config, id) {
   if (id === "favorites") return "Favorites"
   if (id === "recents") return "Recents"
+  if (id === "added") return "Recently added"
   if (id === "user") return "User"
   if (id === "stock") return "Stock"
   var folders = (config && config.folders) || []
@@ -734,7 +856,7 @@ function syncThemeCycleState(config, themes, currentSlug) {
   var cfg = normalizeConfig(config)
   var t = cfg.themeCycle
   var folderStillThere = false
-  if (t.folderId === "favorites" || t.folderId === "recents" || t.folderId === "user" || t.folderId === "stock")
+  if (t.folderId === "favorites" || t.folderId === "recents" || t.folderId === "added" || t.folderId === "user" || t.folderId === "stock")
     folderStillThere = true
   else {
     for (var i = 0; i < cfg.folders.length; i++)
@@ -752,6 +874,7 @@ function slugsInSection(config, themes, id) {
   var cfg = normalizeConfig(config)
   if (id === "favorites") return cfg.favorites.slice()
   if (id === "recents") return cfg.recents.slice()
+  if (id === "added") return recentlyAddedSlugs(themes, cfg)
   if (id === "user") {
     var u = []
     for (var i = 0; i < themes.length; i++) if (themes[i].source === "user") u.push(themes[i].slug)
@@ -816,6 +939,178 @@ function cycleFolderChoices(config) {
   return out
 }
 
+function scheduleFolderChoices(config) {
+  var choices = cycleFolderChoices(config)
+  var out = []
+  for (var i = 0; i < choices.length; i++) {
+    if (choices[i].id === "recents" || choices[i].id === "added") continue
+    out.push(choices[i])
+  }
+  return out
+}
+
+function scheduleTargetRows(config, themes, query, openIds) {
+  var cfg = normalizeConfig(config)
+  var q = String(query || "")
+  var searching = q.trim().length > 0
+  var open = openIds || {}
+  var out = []
+  if (fuzzyMatch(q, "Random favorite", "random")) {
+    out.push({ kind: "random", name: "Random favorite", slug: "__random_favorite__", id: "", expanded: false, count: 0 })
+  }
+  var folders = scheduleFolderChoices(cfg)
+  for (var i = 0; i < folders.length; i++) {
+    var folder = folders[i]
+    var slugs = cycleSlugs(cfg, themes, folder.id)
+    var all = []
+    var seen = {}
+    for (var s = 0; s < slugs.length; s++) {
+      if (!slugs[s] || seen[slugs[s]]) continue
+      var theme = themeBySlug(themes, slugs[s])
+      if (!theme) continue
+      seen[slugs[s]] = true
+      all.push({ slug: theme.slug, name: String(theme.name || theme.slug) })
+    }
+    if (folder.id === "user" || folder.id === "stock") {
+      all.sort(function(a, b) {
+        var an = a.name.toLowerCase()
+        var bn = b.name.toLowerCase()
+        if (an < bn) return -1
+        if (an > bn) return 1
+        if (a.slug < b.slug) return -1
+        if (a.slug > b.slug) return 1
+        return 0
+      })
+    }
+    var hits = []
+    for (var h = 0; h < all.length; h++) {
+      if (searching && !fuzzyMatch(q, all[h].name, all[h].slug)) continue
+      hits.push(all[h])
+    }
+    if (searching && !fuzzyMatch(q, folder.name, folder.id) && !hits.length) continue
+    var expanded = searching ? hits.length > 0 : !!open[folder.id]
+    out.push({
+      kind: "folder",
+      name: folder.name || folder.id,
+      slug: "",
+      id: folder.id,
+      expanded: expanded,
+      count: all.length
+    })
+    if (!expanded) continue
+    for (var n = 0; n < hits.length; n++) {
+      out.push({
+        kind: "theme",
+        name: hits[n].name,
+        slug: hits[n].slug,
+        id: folder.id,
+        expanded: false,
+        count: 0
+      })
+    }
+  }
+  return out
+}
+
+function folderStillListed(config, folderId) {
+  if (!folderId) return false
+  if (folderId === "favorites" || folderId === "user" || folderId === "stock") return true
+  var folders = (config && config.folders) || []
+  for (var i = 0; i < folders.length; i++) if (folders[i].id === folderId) return true
+  return false
+}
+
+function folderHoldSlug(config, themes, folderId, lastSlug, currentSlug) {
+  var slugs = cycleSlugs(config, themes, folderId)
+  if (!slugs.length) return ""
+  if (lastSlug && slugs.indexOf(lastSlug) >= 0) return lastSlug
+  if (currentSlug && slugs.indexOf(currentSlug) >= 0) return currentSlug
+  return slugs[0]
+}
+
+function activeFolderCycle(config, solarPeriod, nowMinutes) {
+  var cfg = normalizeConfig(config)
+  var mode = cfg.schedule.mode
+  if (mode === "rules") {
+    var rule = activeRule(cfg.schedule.rules, nowMinutes)
+    if (!rule || !rule.folderId) return { on: false }
+    return {
+      on: true,
+      store: "rule",
+      ruleId: rule.id,
+      folderId: rule.folderId,
+      minutes: rule.cycleMinutes,
+      lastSlug: rule.lastSlug,
+      cycleLastAt: rule.cycleLastAt,
+      key: rule.id
+    }
+  }
+  if (mode === "sun") {
+    var sun = cfg.schedule.sun
+    if (solarPeriod === "day" && sun.dayFolderId) {
+      return {
+        on: true,
+        store: "sun-day",
+        folderId: sun.dayFolderId,
+        minutes: sun.dayCycleMinutes,
+        lastSlug: sun.dayLastSlug,
+        cycleLastAt: sun.dayCycleLastAt,
+        key: "sun-day"
+      }
+    }
+    if (solarPeriod === "night" && sun.nightFolderId) {
+      return {
+        on: true,
+        store: "sun-night",
+        folderId: sun.nightFolderId,
+        minutes: sun.nightCycleMinutes,
+        lastSlug: sun.nightLastSlug,
+        cycleLastAt: sun.nightCycleLastAt,
+        key: "sun-night"
+      }
+    }
+  }
+  return { on: false }
+}
+
+function stampFolderCycle(config, spec, patch) {
+  var cfg = normalizeConfig(config)
+  var change = patch && typeof patch === "object" ? patch : {}
+  if (!spec || !spec.store) return cfg
+  var stamp = finiteStamp(change.cycleLastAt)
+  if (spec.store === "rule") {
+    for (var i = 0; i < cfg.schedule.rules.length; i++) {
+      if (cfg.schedule.rules[i].id !== spec.ruleId) continue
+      if (change.lastSlug !== undefined) cfg.schedule.rules[i].lastSlug = scheduleThemeKey(change.lastSlug)
+      if (change.cycleLastAt !== undefined) cfg.schedule.rules[i].cycleLastAt = stamp
+      if (change.resetWallpaper) cfg.schedule.rules[i].wallpaperLastAt = stamp || Date.now()
+      break
+    }
+  } else if (spec.store === "sun-day") {
+    if (change.lastSlug !== undefined) cfg.schedule.sun.dayLastSlug = scheduleThemeKey(change.lastSlug)
+    if (change.cycleLastAt !== undefined) cfg.schedule.sun.dayCycleLastAt = stamp
+    if (change.resetWallpaper) cfg.schedule.sun.dayWallpaperLastAt = stamp || Date.now()
+  } else if (spec.store === "sun-night") {
+    if (change.lastSlug !== undefined) cfg.schedule.sun.nightLastSlug = scheduleThemeKey(change.lastSlug)
+    if (change.cycleLastAt !== undefined) cfg.schedule.sun.nightCycleLastAt = stamp
+    if (change.resetWallpaper) cfg.schedule.sun.nightWallpaperLastAt = stamp || Date.now()
+  }
+  return cfg
+}
+
+function syncScheduleFolders(config) {
+  var cfg = normalizeConfig(config)
+  for (var i = 0; i < cfg.schedule.rules.length; i++) {
+    if (cfg.schedule.rules[i].folderId && !folderStillListed(cfg, cfg.schedule.rules[i].folderId))
+      cfg.schedule.rules[i].folderId = ""
+  }
+  if (cfg.schedule.sun.dayFolderId && !folderStillListed(cfg, cfg.schedule.sun.dayFolderId))
+    cfg.schedule.sun.dayFolderId = ""
+  if (cfg.schedule.sun.nightFolderId && !folderStillListed(cfg, cfg.schedule.sun.nightFolderId))
+    cfg.schedule.sun.nightFolderId = ""
+  return cfg
+}
+
 function knownSlugs(themes) {
   var set = {}
   for (var i = 0; i < themes.length; i++) set[themes[i].slug] = true
@@ -857,6 +1152,140 @@ function canDeleteFromOs(theme, currentSlug) {
   if (!isValidSlug(theme.slug)) return false
   if (theme.slug === currentSlug) return false
   return true
+}
+
+function canRenameTheme(theme) {
+  return !!(theme && theme.source === "user" && isValidSlug(theme.slug))
+}
+
+function slugifyThemeName(name) {
+  var s = String(name || "").trim().toLowerCase()
+  s = s.replace(/[^a-z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "")
+  return isValidSlug(s) ? s : ""
+}
+
+function themeTitle(slug) {
+  var s = String(slug || "").replace(/-/g, " ")
+  return s.replace(/(^| )([a-z])/g, function(_sp, lead, ch) { return lead + ch.toUpperCase() })
+}
+
+function backgroundOwned(theme, path) {
+  if (!theme || !path) return false
+  var owned = theme.ownedBackgrounds || []
+  for (var i = 0; i < owned.length; i++) if (owned[i] === path) return true
+  return false
+}
+
+function mapRewrittenPath(path, rewrites) {
+  var s = String(path || "")
+  var rules = Array.isArray(rewrites) ? rewrites : []
+  for (var i = 0; i < rules.length; i++) {
+    var from = String(rules[i] && rules[i].from || "")
+    var to = String(rules[i] && rules[i].to || "")
+    if (from.length < 12 || to.length < 12) continue
+    if (from.indexOf("..") >= 0 || to.indexOf("..") >= 0) continue
+    if (s === from || s.indexOf(from + "/") === 0) return to + s.slice(from.length)
+  }
+  return s
+}
+
+function rewriteConfigPaths(config, rewrites) {
+  var cfg = normalizeConfig(config)
+  var defaults = {}
+  for (var k in cfg.defaultWallpapers) defaults[k] = mapRewrittenPath(cfg.defaultWallpapers[k], rewrites)
+  cfg.defaultWallpapers = defaults
+  cfg.wallpaperCycle.lastPath = mapRewrittenPath(cfg.wallpaperCycle.lastPath, rewrites)
+  cfg.themeCycle.lastPath = mapRewrittenPath(cfg.themeCycle.lastPath, rewrites)
+  return cfg
+}
+
+function renameSlugInConfig(config, from, to) {
+  var cfg = normalizeConfig(config)
+  if (!isValidSlug(from) || !isValidSlug(to) || from === to) return cfg
+  function swap(list) {
+    var out = []
+    var seen = {}
+    var raw = list || []
+    for (var i = 0; i < raw.length; i++) {
+      var s = raw[i] === from ? to : raw[i]
+      if (!s || seen[s]) continue
+      seen[s] = true
+      out.push(s)
+    }
+    return out
+  }
+  function swapTheme(value) {
+    return value === from ? to : value
+  }
+  cfg.favorites = swap(cfg.favorites)
+  cfg.hidden = swap(cfg.hidden)
+  cfg.recents = swap(cfg.recents)
+  for (var f = 0; f < cfg.folders.length; f++) cfg.folders[f].themes = swap(cfg.folders[f].themes)
+  cfg.schedule.day = swapTheme(cfg.schedule.day)
+  cfg.schedule.night = swapTheme(cfg.schedule.night)
+  for (var r = 0; r < cfg.schedule.rules.length; r++)
+    cfg.schedule.rules[r].theme = swapTheme(cfg.schedule.rules[r].theme)
+  cfg.schedule.sun.day = swapTheme(cfg.schedule.sun.day)
+  cfg.schedule.sun.night = swapTheme(cfg.schedule.sun.night)
+  if (cfg.picker.lastSlug === from) cfg.picker.lastSlug = to
+  if (cfg.themeCycle.lastSlug === from) cfg.themeCycle.lastSlug = to
+  var defaults = {}
+  for (var k in cfg.defaultWallpapers) {
+    var key = k === from ? to : k
+    if (!defaults[key]) defaults[key] = cfg.defaultWallpapers[k]
+  }
+  cfg.defaultWallpapers = defaults
+  return cfg
+}
+
+function dropBackgroundPath(config, path) {
+  var cfg = normalizeConfig(config)
+  var p = String(path || "")
+  if (!p) return cfg
+  var defaults = {}
+  for (var k in cfg.defaultWallpapers)
+    if (cfg.defaultWallpapers[k] !== p) defaults[k] = cfg.defaultWallpapers[k]
+  cfg.defaultWallpapers = defaults
+  if (cfg.wallpaperCycle.lastPath === p) cfg.wallpaperCycle.lastPath = ""
+  if (cfg.themeCycle.lastPath === p) cfg.themeCycle.lastPath = ""
+  return cfg
+}
+
+function parseToolResult(raw) {
+  var s = String(raw || "").trim()
+  if (!s || s.length > 8192) return null
+  var o
+  try { o = JSON.parse(s) } catch (e) { return null }
+  if (!o || typeof o !== "object") return null
+  var rewrites = []
+  var rawRewrites = Array.isArray(o.rewrites) ? o.rewrites : []
+  for (var i = 0; i < rawRewrites.length && rewrites.length < 8; i++) {
+    var from = capPath(rawRewrites[i] && rawRewrites[i].from)
+    var to = capPath(rawRewrites[i] && rawRewrites[i].to)
+    if (from && to && from !== to) rewrites.push({ from: from, to: to })
+  }
+  return {
+    ok: o.ok === true,
+    error: capString(o.error || "", 80),
+    from: isValidSlug(o.from) ? String(o.from) : "",
+    to: isValidSlug(o.to) ? String(o.to) : "",
+    path: capPath(o.path),
+    background: capPath(o.background),
+    rewrites: rewrites
+  }
+}
+
+function toolErrorText(info) {
+  var err = info && info.error ? info.error : "failed"
+  if (err === "exists") return "A theme with that name already exists."
+  if (err === "invalid-slug") return "Use a name that becomes a theme slug."
+  if (err === "same") return "Choose a different theme."
+  if (err === "not-user") return "Stock themes cannot be renamed."
+  if (err === "current") return "That background is on the desktop right now."
+  if (err === "not-owned") return "Packaged wallpapers can be copied, not moved or deleted."
+  if (err === "missing") return "That file is no longer there."
+  if (err === "dest") return "That theme cannot take this background."
+  return "Could not update the theme."
 }
 
 function pruneConfig(config, themes) {
@@ -1053,13 +1482,71 @@ function flatten(themes, config, filter, query) {
   for (var so = 0; so < cfg.sectionOrder.length; so++) {
     var id = cfg.sectionOrder[so]
     var hits = hitsFor(id)
-    if (query && !hits.length && id !== "favorites" && id !== "recents") continue
+    if (query && !hits.length && id !== "favorites" && id !== "recents" && id !== "added") continue
     pushHeader(id, sectionDisplayName(cfg, id), isReorderableSection(id), hits.length)
     if (!isCollapsed(cfg, id)) {
       for (var x = 0; x < hits.length; x++) pushTheme(hits[x], id)
     }
   }
 
+  return rows
+}
+
+// Destination picker. Same section order and collapse memory as the catalog.
+// A search opens matching sections for this view only and does not save that.
+function destinationRows(themes, config, excludeSlug, query) {
+  var cfg = normalizeConfig(config)
+  var q = String(query || "").trim().toLowerCase().slice(0, 80)
+  var skip = excludeSlug ? String(excludeSlug) : ""
+  var rows = []
+  var order = cfg.sectionOrder || []
+  for (var so = 0; so < order.length; so++) {
+    var id = order[so]
+    if (id === "recents" || id === "added") continue
+    var slugs = slugsInSection(cfg, themes, id)
+    var hits = []
+    var seen = {}
+    for (var i = 0; i < slugs.length; i++) {
+      var slug = slugs[i]
+      if (!slug || slug === skip || seen[slug]) continue
+      var t = themeBySlug(themes, slug)
+      if (!t || !isValidSlug(t.slug)) continue
+      if (cfg.hidden.indexOf(t.slug) >= 0) continue
+      var label = String(t.name || t.slug)
+      if (q && label.toLowerCase().indexOf(q) < 0 && String(t.slug).toLowerCase().indexOf(q) < 0) continue
+      seen[slug] = true
+      hits.push({ slug: t.slug, name: label })
+    }
+    if (id === "user" || id === "stock") {
+      hits.sort(function(a, b) {
+        var an = String(a.name)
+        var bn = String(b.name)
+        if (an < bn) return -1
+        if (an > bn) return 1
+        if (a.slug < b.slug) return -1
+        if (a.slug > b.slug) return 1
+        return 0
+      })
+    }
+    if (!hits.length) continue
+    var open = q.length > 0 || !isCollapsed(cfg, id)
+    rows.push({
+      rowType: "header",
+      id: id,
+      title: sectionDisplayName(cfg, id),
+      collapsed: !open,
+      themeCount: hits.length
+    })
+    if (!open) continue
+    for (var h = 0; h < hits.length; h++) {
+      rows.push({
+        rowType: "theme",
+        slug: hits[h].slug,
+        name: hits[h].name,
+        section: id
+      })
+    }
+  }
   return rows
 }
 
@@ -1108,7 +1595,7 @@ function activeRule(rules, nowMinutes) {
   var raw = Array.isArray(rules) ? rules : []
   for (var i = 0; i < raw.length; i++) {
     if (raw[i].enabled === false) continue
-    if (!raw[i].theme) continue
+    if (!raw[i].theme && !raw[i].folderId) continue
     list.push(raw[i])
   }
   if (!list.length) return null
@@ -1245,7 +1732,7 @@ function activeWallpaperSpec(config, solarPeriod, nowMinutes) {
         store: "rule",
         ruleId: rule.id,
         key: "rule:" + rule.id,
-        theme: rule.theme
+        theme: rule.folderId ? "" : rule.theme
       }
     }
   }
@@ -1258,7 +1745,7 @@ function activeWallpaperSpec(config, solarPeriod, nowMinutes) {
         lastAt: cfg.schedule.sun.dayWallpaperLastAt,
         store: "sun-day",
         key: "sun-day",
-        theme: cfg.schedule.sun.day
+        theme: cfg.schedule.sun.dayFolderId ? "" : cfg.schedule.sun.day
       }
     }
     if (solarPeriod === "night" && cfg.schedule.sun.nightWallpaperEnabled) {
@@ -1269,7 +1756,7 @@ function activeWallpaperSpec(config, solarPeriod, nowMinutes) {
         lastAt: cfg.schedule.sun.nightWallpaperLastAt,
         store: "sun-night",
         key: "sun-night",
-        theme: cfg.schedule.sun.night
+        theme: cfg.schedule.sun.nightFolderId ? "" : cfg.schedule.sun.night
       }
     }
   }

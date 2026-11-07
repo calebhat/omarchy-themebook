@@ -2,7 +2,7 @@
 
 **The full theme suite for [Omarchy](https://omarchy.org)** — organizer, previewer, picker, and scheduler in one plugin.
 
-Browse every installed theme, sort them into folders with favorites and recents first, pin a default wallpaper, preview before you apply, use an enhanced stock-style carousel, then put the desktop on a clock, sunrise/sunset, theme cycle, or wallpaper cycle. Optional hand-off to [Aether](https://github.com/bjarneo/aether) when you want to edit.
+Browse every installed theme, sort them into folders with favorites, recents, and recently added first, pin a default wallpaper, preview before you apply, use an enhanced stock-style carousel, then put the desktop on a clock, sunrise/sunset, theme cycle, or wallpaper cycle. Optional hand-off to [Aether](https://github.com/bjarneo/aether) when you want to edit.
 
 ThemeBook is not a theme installer and not a designer. It is the place you live in after themes are installed: catalog, library, and schedule.
 
@@ -18,18 +18,19 @@ No sudo or pkexec is required. No extra packages. The only network use is an opt
 
 ## What it does
 
-- **Catalog** of the same installed themes as Style > Theme (user overlays win on slug). The header shows the current theme. **Collapse all** / **Expand all** fold every section at once.
+- **Catalog** of the same installed themes as Style > Theme (user overlays win on slug). The header shows the current theme. Favorites, Recents, and Recently added come first. **Collapse all** / **Expand all** fold every section at once.
 - **Select then apply** — click a card to preview (colors, backgrounds, source, git); the desktop changes only on **Apply theme**, Enter, or double-click.
 - **Colors** — click a swatch to copy that hex (`#89b4fa`). **Copy palette** copies the named colors as a `key = "#hex"` list you can paste into another program.
 - **Favorites** starred from the list or the preview; **Random favorite** applies one at random.
-- **Recents** is always listed (default: under Favorites), even when empty.
+- **Recents** is always listed (default: under Favorites), even when empty. **Recently added** lists the 20 themes newest on disk (birth time of the themes folder entry, then mtime), newest first. It is always listed and starts collapsed.
 - **Folders** you create (**New folder**), rename, and delete (confirmation; themes stay installed). **Add themes** on a user folder opens a checklist: check to add, uncheck to remove. **Move to folder** on a selected theme does the same from the theme side (a theme can be in more than one folder). **✕** on a theme row inside a folder removes it from that folder, next to Favorite. User and Stock still list every theme. Rename and Delete sit in a **⋯** menu on user folders.
-- **Reorder** any section — Favorites, Recents, User, Stock, and your folders — by dragging the **≡** handle. A line between folders shows the drop point. Order is saved in `themebook.json`. **Shift+↑/↓** sorts themes inside a folder; **Shift+←/→** moves sections.
-- **Picker** checkboxes on Favorites, Recents, User, Stock, and your folders choose which sections appear in the carousel.
+- **Reorder** any section — Favorites, Recents, Recently added, User, Stock, and your folders — by dragging the **≡** handle. A line between folders shows the drop point. Order is saved in `themebook.json`. **Shift+↑/↓** sorts themes inside a folder; **Shift+←/→** moves sections.
+- **Picker** checkboxes on Favorites, Recents, Recently added, User, Stock, and your folders choose which sections appear in the carousel. Recently added stays out of the carousel until you check it.
 - **Filters** — All / Favorites / User / Stock / Light / Dark / Hidden, plus search.
 - **Move to folder** is the first preview action (then Favorite, then Edit in Aether). Hide and Show are separate buttons: Hide when the theme is visible, Show when it is hidden.
-- **Backgrounds** — click a wallpaper in the strip to preview it in the panel (it does not change the live theme). **Apply theme** uses the wallpaper you are previewing, or the starred **default** if you have not picked one. Star a default for apply and picker/catalog previews, including schedules.
 - **Hide** themes without uninstalling; **Hidden** filter lists them. **Show** replaces Hide when the theme is already hidden. **Unfavorite** when it is already a favorite.
+- **Rename** a user theme (never packaged stock). The folder name is the theme name. Favorites, folders, and schedules follow the new slug. Renaming the theme you are using keeps it applied.
+- **Backgrounds** — click a wallpaper in the strip to preview it in the panel (it does not change the live theme). A theme-root preview image is an **Apps** tile that returns the preview to that mockup. Video files (mp4, m4v, mov, webm, mkv, avi) show a **Live** badge and loop muted in the preview. **Copy to theme** puts that file on another theme: into that theme’s `backgrounds/` when it is yours, or into `~/.config/omarchy/backgrounds/<slug>/` when the destination is stock. **Move to theme** and **Delete background** only work for wallpapers you own (your theme folder or extra backgrounds). Packaged stock files stay put. The background on the desktop right now cannot be deleted. **Apply theme** uses the wallpaper you are previewing, or the starred **default** if you have not picked one. Star a default for apply and picker/catalog previews, including schedules.
 - **Delete from OS** user themes (never packaged stock, never the active theme) with a confirmation dialog. This deletes `~/.config/omarchy/themes/<slug>` and extra wallpapers in `~/.config/omarchy/backgrounds/<slug>`. Packaged copies under `/usr/share/omarchy/themes` stay. Delete or the **Delete from OS** button.
 - **Check git themes** is always in the header (catalog and schedule). It fetches origin to compare SHAs on every user git clone and never merges, resets, or checks out. A progress overlay lists each theme as current, update available, or failed. `U` opens it. The preview-pane button still appears on a git-backed selection. Applying an upstream theme remains Omarchy’s `omarchy theme update`, not this plugin.
 - **Edit in Aether** (optional) opens the Aether GUI with the theme wallpaper loaded for editing. It does not apply the theme through Aether.
@@ -40,8 +41,8 @@ No sudo or pkexec is required. No extra packages. The only network use is an opt
 ### Schedule types
 
 - **Off** — no ThemeBook schedule is running.
-- **Timed Themes** — as many clock times as you want (**Add time**). Each row has time, theme, **On/Off**, and **Remove**. ThemeBook applies the latest enabled Timed Theme whose time has already passed. A row only gets the accent border when it is On. Expand **▶** on a row to turn on a **wallpaper cycle** for that slot; the minutes field stays visible and keeps your last value when you toggle it off.
-- **Sunrise / sunset** — day and night themes from your Omarchy weather location (`sunwait`). Hidden if `sunwait` is missing. Expand each period to cycle wallpapers on its own timer while sunrise or sunset is in effect. Minutes are kept when you toggle wallpapers off.
+- **Timed Themes** — as many clock times as you want (**Add time**). Each row has time, one target, **On/Off**, and **Remove**. The target opens **Choose target**: **Select** a folder (Favorites, User, Stock, or a folder you made) to walk its themes until the next time, or open that folder and pick one theme. Recents and Recently added are not folder targets. ThemeBook applies the latest enabled row whose time has already passed. A row only gets the accent border when it is On. Expand **▶** to set how often a folder changes themes and to cycle wallpapers of the theme that is current.
+- **Sunrise / sunset** — day and night targets from your Omarchy weather location (`sunwait`). Hidden if `sunwait` is missing. Each side uses the same target list as Timed Themes. Expand a row for the folder interval and for wallpaper rotation while that period is in effect.
 - **Theme cycle** — walks through themes in a folder you pick, every N minutes. Optional **Also cycle wallpapers** (with its own interval) rotates backgrounds of the current theme while that theme is active. Adding or removing themes in that folder (or Favorites, if that’s the source) is picked up on the next tick; a removed theme is dropped from the rotation.
 - **Wallpaper cycle** — rotates wallpapers of the **current** theme only (`omarchy theme bg next`). It never applies a different theme. Adding or removing image files in the theme’s `backgrounds/` folder (or `~/.config/omarchy/backgrounds/<theme>/`) is included on the next tick.
 
@@ -58,9 +59,9 @@ omarchy restart shell
 
 On first start, if you do not already have one, ThemeBook copies its Apps launcher into `~/.local/share/applications/`. It never overwrites that file. It also installs `icon.png` as the Apps icon (`io.github.calebhat.themebook`).
 
-**Theme menu** is on by default for new installs. That writes a `style.theme` override in `~/.config/omarchy/extensions/omarchy-menu.jsonc` so Super+Ctrl+Shift+Space opens ThemeBook’s carousel. Turn **Theme menu** off in the catalog to remove that override and restore Omarchy’s picker. Disabling or removing the plugin does the same restore as the service unloads. The override also falls back to Omarchy’s picker if ThemeBook is already gone. ThemeBook does not edit Hyprland or theme folders.
+**Theme menu** is on by default for new installs. That writes an `appearance.theme` override in `~/.config/omarchy/extensions/omarchy-menu.jsonc` so Super+Ctrl+T and Super+Shift+Ctrl+Space open ThemeBook’s carousel. Turn **Theme menu** off in the catalog to remove that override and restore Omarchy’s picker. Disabling or removing the plugin does the same restore as the service unloads. The override also falls back to Omarchy’s picker if ThemeBook is already gone. ThemeBook does not edit Hyprland or theme folders.
 
-Open the catalog from Apps (**ThemeBook**), Style > ThemeBook, or:
+Open the catalog from Apps (**ThemeBook**), Appearance > ThemeBook, or:
 
 ```sh
 omarchy-shell shell toggle io.github.calebhat.themebook '{}'
@@ -104,7 +105,7 @@ Picker: ↑ folders · ↓ themes · ←/→ move · type to filter · `Enter` a
 
 ## Config
 
-Stored at `~/.config/omarchy/themebook.json`: favorites, hidden slugs, folders, recents, collapsed sections, `sectionOrder`, picker settings (including Theme menu / which folders are in the carousel), default wallpapers, clock 12/24, timed / sunrise schedule, **theme cycle** (folder, minutes, nested wallpaper), and **wallpaper cycle** (minutes). Theme directories are never written except through `omarchy theme set` / `bg set` / `remove`. Git check fetches into `.git` only.
+Stored at `~/.config/omarchy/themebook.json`: favorites, hidden slugs, folders, recents, collapsed sections, `sectionOrder`, picker settings (including Theme menu / which folders are in the carousel), default wallpapers, clock 12/24, timed / sunrise schedule, **theme cycle** (folder, minutes, nested wallpaper), and **wallpaper cycle** (minutes). Recently added is computed from theme directory birth time (20 newest). It is not stored as a slug list. Theme directories are never written except through `omarchy theme set` / `bg set` / `remove`. Git check fetches into `.git` only.
 
 Local IPC (`omarchy-shell themebook …`) is the same user session as the shell. It only accepts installed theme slugs.
 
@@ -114,11 +115,11 @@ Local IPC (`omarchy-shell themebook …`) is the same user session as the shell.
 omarchy plugin remove io.github.calebhat.themebook --yes
 ```
 
-That does not delete your themes. Disable and remove strip ThemeBook’s `style.theme` override from `~/.config/omarchy/extensions/omarchy-menu.jsonc` as the service unloads (same as turning **Theme menu** off). Leftovers you can delete yourself:
+That does not delete your themes. Disable and remove strip ThemeBook’s `appearance.theme` override from `~/.config/omarchy/extensions/omarchy-menu.jsonc` as the service unloads (same as turning **Theme menu** off). Leftovers you can delete yourself:
 
 - `~/.local/share/applications/io.github.calebhat.themebook.desktop`
 - `~/.config/omarchy/themebook.json`
-- a `style.theme` override in `omarchy-menu.jsonc` only if you removed the plugin while `omarchy-shell` was not running (the leftover action still falls back to Omarchy’s picker)
+- an `appearance.theme` override in `omarchy-menu.jsonc` only if you removed the plugin while `omarchy-shell` was not running (the leftover action still falls back to Omarchy’s picker)
 
 ## License and dependencies
 
@@ -136,7 +137,7 @@ Optional tools (already common on Omarchy, not installed by this plugin):
 
 ## Security notes
 
-- Applies themes with `omarchy theme set <slug>` as argv, never `bash -c`. Deletes user themes with `scripts/remove <slug>` (argv-only); the helper refuses the current theme, invalid slugs, and anything outside the user themes/backgrounds trees. It never writes under `/usr/share`. Git checks use `scripts/update-git` (argv-only, `GIT_TERMINAL_PROMPT=0`, `core.hooksPath=/dev/null`, 45s per theme). It only fetches `origin` on real user dirs with a `.git` directory, compares HEAD to `@{upstream}`, and never pull/merge/checkout. Origin URLs that name a transport helper or a non-git scheme are refused.
+- Applies themes with `omarchy theme set <slug>` as argv, never `bash -c`. Deletes user themes with `scripts/remove <slug>` (argv-only); the helper refuses the current theme, invalid slugs, and anything outside the user themes/backgrounds trees. It never writes under `/usr/share`. Rename uses `scripts/rename` (argv-only) on user theme folders only. Background copy, move, and delete use `scripts/background` (argv-only): stock files can be copied, and move or delete is refused unless the file’s real path is inside your theme or extra-backgrounds directory. Git checks use `scripts/update-git` (argv-only, `GIT_TERMINAL_PROMPT=0`, `core.hooksPath=/dev/null`, 45s per theme). It only fetches `origin` on real user dirs with a `.git` directory, compares HEAD to `@{upstream}`, and never pull/merge/checkout. Origin URLs that name a transport helper or a non-git scheme are refused.
 - Preview and background paths must resolve under the real theme directory (symlink themes included). Directory symlinks under `backgrounds/` are not followed out of the tree. Catalog JSON is capped (256 themes, 48 backgrounds each, 1 MiB). The catalog helper runs under one 12s TERM / 2s KILL deadline; `find` is item-capped before sort. `themebook.json` is size-checked with `stat` before any bytes are copied into the shell (max 256 KiB). Folder and theme names render as plain text.
 - **Theme menu** edits `omarchy-menu.jsonc` only while that checkbox is on; turning it off, disabling the plugin, or removing it deletes the override. The override action falls back to `omarchy-theme-switcher` if the ThemeBook IPC target is gone.
 - The Apps `.desktop` file is created only if it does not already exist.

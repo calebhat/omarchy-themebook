@@ -30,6 +30,15 @@ Item {
   property string wallpaperPeriodKey: ""
   property string pendingManualSlug: ""
   property string pendingRemoveSlug: ""
+  property string pendingRenameFrom: ""
+  property string pendingRenameTo: ""
+  property string pendingBgOp: ""
+  property string pendingBgFrom: ""
+  property string pendingBgPath: ""
+  property string pendingBgTo: ""
+  property string actionError: ""
+  signal themeRenamed(string from, string to)
+  signal backgroundRemoved(string path)
   property bool updateOpen: false
   property bool updateRunning: false
   property int updateTotal: 0
@@ -39,6 +48,7 @@ Item {
   property bool installing: false
   property bool thumbsWarming: false
   property string lastThumbKey: ""
+  property string lastPosterKey: ""
   property string configStamp: ""
 
   readonly property string pluginDir: {
@@ -292,6 +302,193 @@ Item {
     removeProc.running = true
   }
 
+  function patchThemeRename(from, to, rewrites) {
+    var list = (root.themes || []).slice()
+    for (var i = 0; i < list.length; i++) {
+      if (!list[i] || list[i].slug !== from) continue
+      var copy = {}
+      for (var k in list[i]) copy[k] = list[i][k]
+      copy.slug = to
+      copy.name = Model.themeTitle(to)
+      var bgs = copy.backgrounds || []
+      var nextBgs = []
+      for (var b = 0; b < bgs.length; b++) nextBgs.push(Model.mapRewrittenPath(bgs[b], rewrites))
+      copy.backgrounds = nextBgs
+      var owned = copy.ownedBackgrounds || []
+      var nextOwned = []
+      for (var n = 0; n < owned.length; n++) nextOwned.push(Model.mapRewrittenPath(owned[n], rewrites))
+      copy.ownedBackgrounds = nextOwned
+      if (copy.preview) copy.preview = Model.mapRewrittenPath(copy.preview, rewrites)
+      if (copy.appPreview) copy.appPreview = Model.mapRewrittenPath(copy.appPreview, rewrites)
+      if (copy.path) copy.path = Model.mapRewrittenPath(copy.path, rewrites)
+      if (copy.thumbnail) copy.thumbnail = Model.mapRewrittenPath(copy.thumbnail, rewrites)
+      list[i] = copy
+    }
+    root.themes = list
+  }
+
+  function renameTheme(slug, name) {
+    if (!Model.isValidSlug(slug) || !knownTheme(slug)) return
+    var theme = Model.themeBySlug(root.themes, slug)
+    if (!Model.canRenameTheme(theme)) {
+      root.actionError = "Stock themes cannot be renamed."
+      return
+    }
+    var to = Model.slugifyThemeName(name)
+    if (!to) {
+      root.actionError = "Use a name that becomes a theme slug."
+      return
+    }
+    if (to === slug) {
+      root.actionError = ""
+      return
+    }
+    if (knownTheme(to)) {
+      root.actionError = "A theme with that name already exists."
+      return
+    }
+    if (renameProc.running) return
+    var cmd = scriptPath("rename")
+    if (!cmd) return
+    root.actionError = ""
+    root.pendingRenameFrom = slug
+    root.pendingRenameTo = to
+    renameProc.command = [cmd, slug, to]
+    renameProc.running = true
+  }
+
+  function finishRename(code, payload) {
+    var from = root.pendingRenameFrom
+    var to = root.pendingRenameTo
+    root.pendingRenameFrom = ""
+    root.pendingRenameTo = ""
+    var info = Model.parseToolResult(payload)
+    if (code === 0 && info && info.ok && info.to) {
+      var dest = info.to
+      var rewrites = info.rewrites || []
+      patchThemeRename(from, dest, rewrites)
+      if (root.currentSlug === from) root.currentSlug = dest
+      var next = Model.renameSlugInConfig(root.config, from, dest)
+      next = Model.rewriteConfigPaths(next, rewrites)
+      saveConfig(next)
+      root.themeRenamed(from, dest)
+      if (info.background)
+        Quickshell.execDetached(["omarchy", "theme", "bg", "set", info.background])
+    } else {
+      root.actionError = Model.toolErrorText(info)
+    }
+    root.reloadCatalog()
+  }
+
+  function patchBackgroundLists(fromSlug, toSlug, oldPath, newPath, removing) {
+    var list = (root.themes || []).slice()
+    for (var i = 0; i < list.length; i++) {
+      var t = list[i]
+      if (!t) continue
+      var copy = null
+      if (removing && t.slug === fromSlug) {
+        copy = {}
+        for (var k in t) copy[k] = t[k]
+        var bgs = []
+        var raw = t.backgrounds || []
+        for (var b = 0; b < raw.length; b++) if (raw[b] !== oldPath) bgs.push(raw[b])
+        copy.backgrounds = bgs
+        var owned = []
+        var rawOwned = t.ownedBackgrounds || []
+        for (var n = 0; n < rawOwned.length; n++) if (rawOwned[n] !== oldPath) owned.push(rawOwned[n])
+        copy.ownedBackgrounds = owned
+      }
+      if (newPath && t.slug === toSlug) {
+        if (!copy) {
+          copy = {}
+          for (var k2 in t) copy[k2] = t[k2]
+          copy.backgrounds = (t.backgrounds || []).slice()
+          copy.ownedBackgrounds = (t.ownedBackgrounds || []).slice()
+        }
+        if (copy.backgrounds.indexOf(newPath) < 0) copy.backgrounds.push(newPath)
+        if (copy.ownedBackgrounds.indexOf(newPath) < 0) copy.ownedBackgrounds.push(newPath)
+      }
+      if (copy) list[i] = copy
+    }
+    root.themes = list
+  }
+
+  function runBackground(op, fromSlug, path, toSlug) {
+    if (!Model.isValidSlug(fromSlug) || !path || String(path).indexOf("..") >= 0) return
+    if (op !== "delete" && !Model.isValidSlug(toSlug)) return
+    if (fileProc.running) return
+    var cmd = scriptPath("background")
+    if (!cmd) return
+    var theme = Model.themeBySlug(root.themes, fromSlug)
+    if (!theme) return
+    var known = false
+    var bgs = theme.backgrounds || []
+    for (var i = 0; i < bgs.length; i++) if (bgs[i] === path) known = true
+    if (!known) return
+    if (op !== "copy" && !Model.backgroundOwned(theme, path)) {
+      root.actionError = "Packaged wallpapers can be copied, not moved or deleted."
+      return
+    }
+    root.actionError = ""
+    root.pendingBgOp = op
+    root.pendingBgFrom = fromSlug
+    root.pendingBgPath = path
+    root.pendingBgTo = toSlug || ""
+    var args = [cmd, op, fromSlug, path]
+    if (op !== "delete") args.push(toSlug)
+    fileProc.command = args
+    fileProc.running = true
+  }
+
+  function copyBackground(fromSlug, path, toSlug) {
+    runBackground("copy", fromSlug, path, toSlug)
+  }
+
+  function moveBackground(fromSlug, path, toSlug) {
+    runBackground("move", fromSlug, path, toSlug)
+  }
+
+  function deleteBackground(slug, path) {
+    runBackground("delete", slug, path, "")
+  }
+
+  function finishBackground(code, payload) {
+    var op = root.pendingBgOp
+    var from = root.pendingBgFrom
+    var oldPath = root.pendingBgPath
+    var to = root.pendingBgTo
+    var wasCurrent = false
+    var list = root.themes || []
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].currentBackground === oldPath) wasCurrent = true
+    }
+    var wasDefault = !!(root.config.defaultWallpapers && root.config.defaultWallpapers[from] === oldPath)
+    root.pendingBgOp = ""
+    root.pendingBgFrom = ""
+    root.pendingBgPath = ""
+    root.pendingBgTo = ""
+    var info = Model.parseToolResult(payload)
+    if (code === 0 && info && info.ok) {
+      root.actionError = ""
+      if (op === "delete") {
+        patchBackgroundLists(from, "", oldPath, "", true)
+        saveConfig(Model.dropBackgroundPath(root.config, oldPath))
+        root.backgroundRemoved(oldPath)
+      } else if (op === "move" && info.path) {
+        patchBackgroundLists(from, to, oldPath, info.path, true)
+        var next = Model.dropBackgroundPath(root.config, oldPath)
+        if (wasDefault) next.defaultWallpapers[to] = info.path
+        saveConfig(next)
+        root.backgroundRemoved(oldPath)
+        if (wasCurrent)
+          Quickshell.execDetached(["omarchy", "theme", "bg", "set", info.path])
+      }
+    } else {
+      root.actionError = Model.toolErrorText(info)
+    }
+    root.reloadCatalog()
+  }
+
   function openPicker() {
     pickerOverlay.open()
   }
@@ -362,9 +559,10 @@ Item {
     var id = Model.newFolderId(next.folders)
     next.folders.push({ id: id, name: Model.sanitizeFolderName(name), themes: [], inPicker: true })
     var order = next.sectionOrder.slice()
-    var rec = order.indexOf("recents")
+    var anchor = order.indexOf("added")
+    if (anchor < 0) anchor = order.indexOf("recents")
     var user = order.indexOf("user")
-    var at = rec >= 0 ? rec + 1 : (user >= 0 ? user : order.length)
+    var at = anchor >= 0 ? anchor + 1 : (user >= 0 ? user : order.length)
     order.splice(at, 0, id)
     next.sectionOrder = Model.normalizeSectionOrder(order, next.folders)
     saveConfig(next)
@@ -443,6 +641,7 @@ Item {
     var next = Model.normalizeConfig(root.config)
     if (id === "favorites") next.picker.includeFavorites = on === true
     else if (id === "recents") next.picker.includeRecents = on === true
+    else if (id === "added") next.picker.includeAdded = on === true
     else if (id === "user") next.picker.includeUser = on === true
     else if (id === "stock") next.picker.includeStock = on === true
     else {
@@ -483,7 +682,7 @@ Item {
   // Same strip as scripts/set-default-picker restore. argv python so this still
   // runs after plugin-remove deletes the checkout (disable destroys the service
   // first, but the script file may already be gone).
-  readonly property string restoreMenuPy: "import pathlib,sys\npath=pathlib.Path(sys.argv[1])\nif not path.exists(): raise SystemExit(0)\nout=[]\nfor line in path.read_text().splitlines(True):\n    if line.lstrip().startswith('\"style.theme\"'): continue\n    out.append(line)\npath.write_text(''.join(out).replace(',\\n}','\\n}'))"
+  readonly property string restoreMenuPy: "import pathlib,sys\npath=pathlib.Path(sys.argv[1])\nif not path.exists(): raise SystemExit(0)\nout=[]\nfor line in path.read_text().splitlines(True):\n    key=line.lstrip()\n    if key.startswith('\"style.theme\"') or key.startswith('\"appearance.theme\"'): continue\n    out.append(line)\npath.write_text(''.join(out).replace(',\\n}','\\n}'))"
 
   function restorePickerMenuNow() {
     var menu = root.home + "/.config/omarchy/extensions/omarchy-menu.jsonc"
@@ -503,6 +702,7 @@ Item {
     var cfg = Model.normalizeConfig(root.config)
     if (id === "favorites") return cfg.picker.includeFavorites
     if (id === "recents") return cfg.picker.includeRecents
+    if (id === "added") return cfg.picker.includeAdded
     if (id === "user") return cfg.picker.includeUser
     if (id === "stock") return cfg.picker.includeStock
     for (var i = 0; i < cfg.folders.length; i++)
@@ -512,7 +712,7 @@ Item {
 
   function setCollapsedAll(collapsed) {
     var next = Model.normalizeConfig(root.config)
-    var ids = ["favorites", "recents", "user", "stock", "hidden"]
+    var ids = ["favorites", "recents", "added", "user", "stock", "hidden"]
     for (var i = 0; i < next.folders.length; i++) ids.push(next.folders[i].id)
     for (var j = 0; j < ids.length; j++) next.collapsed[ids[j]] = collapsed === true
     saveConfig(next)
@@ -585,8 +785,34 @@ Item {
       if (s.enabled) s.sun.enabled = false
       s.mode = s.sun.enabled ? "sun" : (s.enabled ? "rules" : "off")
     }
-    if (patch.day !== undefined) s.sun.day = patch.day
-    if (patch.night !== undefined) s.sun.night = patch.night
+    if (patch.day !== undefined) {
+      s.sun.day = patch.day
+      if (patch.day) s.sun.dayFolderId = ""
+    }
+    if (patch.night !== undefined) {
+      s.sun.night = patch.night
+      if (patch.night) s.sun.nightFolderId = ""
+    }
+    if (patch.dayFolderId !== undefined) {
+      s.sun.dayFolderId = patch.dayFolderId
+      if (patch.dayFolderId) s.sun.day = ""
+      s.sun.dayCycleLastAt = Date.now()
+      s.sun.dayLastSlug = ""
+    }
+    if (patch.nightFolderId !== undefined) {
+      s.sun.nightFolderId = patch.nightFolderId
+      if (patch.nightFolderId) s.sun.night = ""
+      s.sun.nightCycleLastAt = Date.now()
+      s.sun.nightLastSlug = ""
+    }
+    if (patch.dayCycleMinutes !== undefined) {
+      s.sun.dayCycleMinutes = patch.dayCycleMinutes
+      s.sun.dayCycleLastAt = Date.now()
+    }
+    if (patch.nightCycleMinutes !== undefined) {
+      s.sun.nightCycleMinutes = patch.nightCycleMinutes
+      s.sun.nightCycleLastAt = Date.now()
+    }
     if (patch.dayWallpaperEnabled !== undefined) s.sun.dayWallpaperEnabled = patch.dayWallpaperEnabled === true
     if (patch.nightWallpaperEnabled !== undefined) s.sun.nightWallpaperEnabled = patch.nightWallpaperEnabled === true
     if (patch.dayWallpaperMinutes !== undefined) s.sun.dayWallpaperMinutes = patch.dayWallpaperMinutes
@@ -644,7 +870,10 @@ Item {
     for (var i = 0; i < next.schedule.rules.length; i++) {
       if (next.schedule.rules[i].id !== id) continue
       if (time !== undefined && time !== "") next.schedule.rules[i].time = Model.normalizeHHMM(time, next.schedule.rules[i].time)
-      if (theme !== undefined) next.schedule.rules[i].theme = Model.scheduleThemeKey(theme)
+      if (theme !== undefined) {
+        next.schedule.rules[i].theme = Model.scheduleThemeKey(theme)
+        if (next.schedule.rules[i].theme) next.schedule.rules[i].folderId = ""
+      }
       if (enabled !== undefined) next.schedule.rules[i].enabled = enabled === true
       if (wallpaper && typeof wallpaper === "object") {
         if (wallpaper.enabled !== undefined) {
@@ -654,6 +883,16 @@ Item {
         if (wallpaper.minutes !== undefined) {
           next.schedule.rules[i].wallpaperMinutes = wallpaper.minutes
           next.schedule.rules[i].wallpaperLastAt = Date.now()
+        }
+        if (wallpaper.folderId !== undefined) {
+          next.schedule.rules[i].folderId = String(wallpaper.folderId || "")
+          if (wallpaper.folderId) next.schedule.rules[i].theme = ""
+          next.schedule.rules[i].cycleLastAt = Date.now()
+          next.schedule.rules[i].lastSlug = ""
+        }
+        if (wallpaper.cycleMinutes !== undefined) {
+          next.schedule.rules[i].cycleMinutes = wallpaper.cycleMinutes
+          next.schedule.rules[i].cycleLastAt = Date.now()
         }
       }
       break
@@ -694,6 +933,20 @@ Item {
     if (root.manualOverride && period !== root.overridePeriod)
       root.manualOverride = false
     if (period === root.lastScheduledPeriod && root.lastAppliedBySchedule) return
+    var folderSpec = Model.activeFolderCycle(cfg, root.solarPeriod)
+    if (folderSpec.on) {
+      var hold = Model.folderHoldSlug(cfg, root.themes, folderSpec.folderId, folderSpec.lastSlug, root.currentSlug)
+      var entered = Date.now()
+      saveConfig(Model.stampFolderCycle(cfg, folderSpec, {
+        lastSlug: hold || folderSpec.lastSlug,
+        cycleLastAt: entered,
+        resetWallpaper: true
+      }))
+      root.lastScheduledPeriod = period
+      root.lastAppliedBySchedule = hold || root.currentSlug || period
+      if (hold && hold !== root.currentSlug) applyTheme(hold, true)
+      return
+    }
     var slug = Model.pickScheduledSlug(cfg, root.themes, period, root.currentSlug)
     if (!slug || slug === root.currentSlug) {
       root.lastScheduledPeriod = period
@@ -737,10 +990,42 @@ Item {
     saveConfig(next)
   }
 
+  function tickFolderSchedule() {
+    if (root.otherSchedulerEnabled) return
+    var cfg = Model.normalizeConfig(root.config)
+    var mode = cfg.schedule.mode
+    if (mode !== "rules" && mode !== "sun") return
+    var period = Model.currentPeriod(cfg, root.solarPeriod)
+    if (!period || period !== root.lastScheduledPeriod) return
+    if (root.manualOverride && period === root.overridePeriod) return
+    var spec = Model.activeFolderCycle(cfg, root.solarPeriod)
+    if (!spec.on) return
+    var now = Date.now()
+    if (!spec.cycleLastAt) {
+      saveConfig(Model.stampFolderCycle(cfg, spec, { cycleLastAt: now }))
+      return
+    }
+    if ((now - spec.cycleLastAt) < Model.cycleIntervalMs(spec.minutes, 0, 30)) return
+    var slugs = Model.cycleSlugs(cfg, root.themes, spec.folderId)
+    if (!slugs.length) return
+    var nextSlug = Model.nextWallpaper(slugs, spec.lastSlug || root.currentSlug)
+    if (!nextSlug) return
+    var changed = nextSlug !== root.currentSlug
+    saveConfig(Model.stampFolderCycle(cfg, spec, {
+      lastSlug: nextSlug,
+      cycleLastAt: now,
+      resetWallpaper: changed
+    }))
+    if (changed) applyTheme(nextSlug, true)
+  }
+
   function tickThemeCycle() {
     if (root.otherSchedulerEnabled) return
     var cfg = Model.normalizeConfig(root.config)
-    if (cfg.schedule.mode !== "themes") return
+    if (cfg.schedule.mode !== "themes") {
+      root.tickFolderSchedule()
+      return
+    }
     var t = cfg.themeCycle
     if (!t.folderId) return
     var now = Date.now()
@@ -803,6 +1088,36 @@ Item {
     return need
   }
 
+  function missingLivePosters(themes) {
+    var list = Array.isArray(themes) ? themes : root.themes
+    var need = []
+    var seen = {}
+    for (var i = 0; i < list.length; i++) {
+      var bgs = list[i].backgrounds || []
+      var posters = list[i].backgroundPosters || {}
+      for (var j = 0; j < bgs.length; j++) {
+        var path = bgs[j]
+        if (!Model.isLivePath(path) || posters[path] || seen[path]) continue
+        seen[path] = true
+        need.push(path)
+        if (need.length >= 40) return need
+      }
+    }
+    return need
+  }
+
+  function ensureLivePosters(themes) {
+    var need = missingLivePosters(themes)
+    if (!need.length || posterProc.running) return
+    var key = need.slice().sort().join("\n")
+    if (key === root.lastPosterKey) return
+    root.lastPosterKey = key
+    var cmd = [root.scriptPath("warm-posters")]
+    for (var i = 0; i < need.length; i++) cmd.push(need[i])
+    posterProc.command = cmd
+    posterProc.running = true
+  }
+
   function ensureThumbs(themes) {
     var need = missingThumbPaths(themes)
     if (!need.length || root.thumbsWarming) return
@@ -843,14 +1158,16 @@ Item {
   }
 
   function applyCycleState() {
-    var next = Model.syncThemeCycleState(root.config, root.themes, root.currentSlug)
-    if (JSON.stringify(root.config.themeCycle || {}) !== JSON.stringify(next.themeCycle || {}))
+    var next = Model.syncScheduleFolders(Model.syncThemeCycleState(root.config, root.themes, root.currentSlug))
+    if (JSON.stringify(root.config.themeCycle || {}) !== JSON.stringify(next.themeCycle || {})
+        || JSON.stringify(root.config.schedule || {}) !== JSON.stringify(next.schedule || {}))
       root.config = next
   }
 
   function syncCycles() {
-    var next = Model.syncThemeCycleState(root.config, root.themes, root.currentSlug)
-    if (JSON.stringify(root.config.themeCycle || {}) !== JSON.stringify(next.themeCycle || {}))
+    var next = Model.syncScheduleFolders(Model.syncThemeCycleState(root.config, root.themes, root.currentSlug))
+    if (JSON.stringify(root.config.themeCycle || {}) !== JSON.stringify(next.themeCycle || {})
+        || JSON.stringify(root.config.schedule || {}) !== JSON.stringify(next.schedule || {}))
       saveConfig(next)
     root.foldersChanged()
   }
@@ -878,15 +1195,28 @@ Item {
             if (cur) root.currentSlug = cur
             if (!(root.pendingConfigWrite || configWriter.running)) {
               var pruned = Model.pruneConfig(root.config, parsed)
-              root.config = Model.syncThemeCycleState(pruned, parsed, cur || root.currentSlug)
+              root.config = Model.syncScheduleFolders(Model.syncThemeCycleState(pruned, parsed, cur || root.currentSlug))
             }
             root.themes = Model.applyDefaultPreviews(parsed, root.config)
             root.catalogRevision++
             root.ensureThumbs(root.themes)
+            root.ensureLivePosters(root.themes)
           }
         } catch (e) {
           console.warn("themebook catalog:", e)
         }
+      }
+    }
+  }
+
+  Process {
+    id: posterProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        if (String(text || "").indexOf("updated") < 0) return
+        root.lastPosterKey = ""
+        root.reloadCatalog()
       }
     }
   }
@@ -995,6 +1325,34 @@ Item {
       if (code === 0 && slug)
         saveConfig(Model.dropThemeFromConfig(root.config, slug))
       root.reloadCatalog()
+    }
+  }
+
+  Process {
+    id: renameProc
+    property string payload: ""
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: renameProc.payload = String(text || "")
+    }
+    onExited: function(code) {
+      var payload = renameProc.payload
+      renameProc.payload = ""
+      root.finishRename(code, payload)
+    }
+  }
+
+  Process {
+    id: fileProc
+    property string payload: ""
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: fileProc.payload = String(text || "")
+    }
+    onExited: function(code) {
+      var payload = fileProc.payload
+      fileProc.payload = ""
+      root.finishBackground(code, payload)
     }
   }
 

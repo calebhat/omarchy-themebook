@@ -25,7 +25,10 @@ Item {
 
   readonly property color dimColor: Color.background
   readonly property color foreground: Color.imagePicker.text
-  readonly property color scrim: Color.imagePicker.scrim
+  // Stock image picker dropped imagePicker.scrim in 4.5. menu.scrim is not
+  // always a color while the shell is still loading a plugin, so the dim is
+  // the same fallback Color.qml uses: half the foundational background.
+  readonly property color scrim: Util.alpha(Color.background, 0.5)
   readonly property color selectedBorder: Color.imagePicker.selectedBorder
   readonly property color unselectedBorder: Color.imagePicker.unselectedBorder
   property int expandedWidth: 768
